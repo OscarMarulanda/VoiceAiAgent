@@ -88,6 +88,7 @@ For WordPress, the script tag goes in:
 - **Typing indicator** — Shows while agent is processing
 - **Message history** — Persisted in sessionStorage (survives page navigation within session)
 - **Minimize/close** — Can be minimized to the floating button
+- **Draggable launcher** — Click to open, drag to reposition the floating button
 - **Keyboard support** — Enter to send, Escape to minimize
 
 ## WebSocket Protocol

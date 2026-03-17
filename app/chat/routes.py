@@ -11,7 +11,7 @@ import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.agent.core import process_message
+from app.agent.core import process_message, get_last_turn_usage
 from app.repositories import session_repo
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,8 @@ async def chat_ws(ws: WebSocket):
     # Metrics accumulation (ADR-038)
     _turns = 0
     _agent_ms_total = 0.0
+    _input_tokens = 0
+    _output_tokens = 0
 
     # Start ping timeout watcher
     ping_task = asyncio.create_task(_ping_watchdog(ws, lambda: last_ping))
@@ -91,6 +93,9 @@ async def chat_ws(ws: WebSocket):
                     # Accumulate metrics (ADR-038)
                     _turns += 1
                     _agent_ms_total += elapsed_ms
+                    usage = get_last_turn_usage()
+                    _input_tokens += usage["input_tokens"]
+                    _output_tokens += usage["output_tokens"]
                 except asyncio.TimeoutError:
                     logger.warning("Agent timeout — session=%s", session_id)
                     response_text = (
@@ -129,6 +134,9 @@ async def chat_ws(ws: WebSocket):
                     "tools_used": sorted({e["tool"] for e in tool_log if "tool" in e}),
                     "appointment_booked": bool(notepad.get("last_booking")),
                     "outcome": "completed",
+                    "input_tokens": _input_tokens,
+                    "output_tokens": _output_tokens,
+                    "total_tokens": _input_tokens + _output_tokens,
                 }
                 await session_repo.update_metrics(session_id, metrics)
             except Exception:

@@ -61,9 +61,28 @@ tailwind.config = {
     min-width: 480px;
     border-left: 1px solid #e2e4ec;
     opacity: 1;
+    overflow-y: auto;
   }
 
   /* Scrollbar styling */
+  .detail-accordion { transition: flex 300ms ease; }
+  .detail-accordion.open .accordion-chevron { transform: rotate(180deg); }
+  .detail-accordion.open { flex: 1; }
+  .detail-accordion:not(.open) { flex: 0 0 auto; }
+  .accordion-body {
+    overflow: hidden;
+    transition: opacity 250ms ease, max-height 300ms ease;
+  }
+  .detail-accordion.open .accordion-body {
+    opacity: 1;
+  }
+  .detail-accordion:not(.open) .accordion-body {
+    opacity: 0;
+    max-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    border-top: none !important;
+  }
   .custom-scroll::-webkit-scrollbar { width: 6px; }
   .custom-scroll::-webkit-scrollbar-track { background: transparent; }
   .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -139,7 +158,7 @@ tailwind.config = {
 
   <!-- Footer -->
   <div class="p-4 border-t border-sidebar-border">
-    <div class="text-xs text-sidebar-muted">Powered by Claude AI</div>
+    <div class="text-xs text-sidebar-muted">Built by Oscar Marulanda</div>
   </div>
 </aside>
 
@@ -621,6 +640,9 @@ function detailHTML(s) {
 
   const avgResponse = metrics.avg_agent_ms != null ? `${Math.round(metrics.avg_agent_ms)}ms` : '—';
 
+  // Cost calculation
+  const cost = computeSessionCost(s, metrics);
+
   return `
     <!-- Header -->
     <div class="flex items-start justify-between p-4 border-b border-dash-border shrink-0">
@@ -646,45 +668,182 @@ function detailHTML(s) {
       </button>
     </div>
 
-    <!-- Transcript -->
-    <div class="flex-1 overflow-hidden flex flex-col mx-4 mt-4 rounded-lg border border-dash-border bg-dash-muted/30">
-      <div class="border-b border-dash-border px-4 py-2 shrink-0">
-        <h4 class="text-sm font-medium">Transcript</h4>
-      </div>
-      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4">
-        ${transcriptHTML || '<p class="text-sm text-dash-muted-fg text-center py-8">No messages in this session</p>'}
-      </div>
-    </div>
+    <!-- Accordion sections -->
+    <div class="flex-1 flex flex-col mx-4 my-4 gap-2 overflow-hidden">
 
-    <!-- Metrics -->
-    <div class="mx-4 my-4 rounded-lg border border-dash-border bg-dash-muted/30 p-4 shrink-0">
-      <h4 class="mb-3 text-sm font-medium">Metrics</h4>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <span class="text-xs text-dash-muted-fg">Total Turns</span>
-          <p class="text-lg font-semibold">${metrics.total_turns ?? '—'}</p>
-        </div>
-        <div>
-          <span class="text-xs text-dash-muted-fg">Avg Response</span>
-          <p class="text-lg font-semibold">${avgResponse}</p>
-        </div>
-        <div>
-          <span class="text-xs text-dash-muted-fg">Input Tokens</span>
-          <p class="text-lg font-semibold">${metrics.input_tokens != null ? metrics.input_tokens.toLocaleString() : '—'}</p>
-        </div>
-        <div>
-          <span class="text-xs text-dash-muted-fg">Output Tokens</span>
-          <p class="text-lg font-semibold">${metrics.output_tokens != null ? metrics.output_tokens.toLocaleString() : '—'}</p>
-        </div>
-        <div class="col-span-2">
-          <span class="text-xs text-dash-muted-fg">Tools Used</span>
-          <div class="mt-1 flex flex-wrap gap-1">${toolsHTML}</div>
-        </div>
-        <div class="col-span-2 flex items-center justify-between rounded-lg bg-dash-card p-3 border border-dash-border">
-          ${bookedHTML}
+      <!-- Transcript -->
+      <div class="detail-accordion open flex flex-col rounded-lg border border-dash-border bg-dash-muted/30 overflow-hidden min-h-0">
+        <button onclick="toggleAccordion(this)" class="flex items-center justify-between px-4 py-2.5 shrink-0 hover:bg-dash-muted/50 transition-colors">
+          <h4 class="text-sm font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-base">chat</span>
+            Transcript
+          </h4>
+          <span class="material-symbols-outlined accordion-chevron text-dash-muted-fg" style="font-size:18px;transition:transform 200ms">expand_more</span>
+        </button>
+        <div class="accordion-body flex-1 overflow-y-auto custom-scroll p-4 space-y-4 border-t border-dash-border">
+          ${transcriptHTML || '<p class="text-sm text-dash-muted-fg text-center py-8">No messages in this session</p>'}
         </div>
       </div>
+
+      <!-- Metrics -->
+      <div class="detail-accordion flex flex-col rounded-lg border border-dash-border bg-dash-muted/30 overflow-hidden min-h-0">
+        <button onclick="toggleAccordion(this)" class="flex items-center justify-between px-4 py-2.5 shrink-0 hover:bg-dash-muted/50 transition-colors">
+          <h4 class="text-sm font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-base">monitoring</span>
+            Metrics
+          </h4>
+          <span class="material-symbols-outlined accordion-chevron text-dash-muted-fg" style="font-size:18px;transition:transform 200ms">expand_more</span>
+        </button>
+        <div class="accordion-body overflow-y-auto custom-scroll p-4 border-t border-dash-border">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <span class="text-xs text-dash-muted-fg">Total Turns</span>
+              <p class="text-lg font-semibold">${metrics.total_turns ?? '—'}</p>
+            </div>
+            <div>
+              <span class="text-xs text-dash-muted-fg">Avg Response</span>
+              <p class="text-lg font-semibold">${avgResponse}</p>
+            </div>
+            <div>
+              <span class="text-xs text-dash-muted-fg">Input Tokens</span>
+              <p class="text-lg font-semibold">${metrics.input_tokens != null ? metrics.input_tokens.toLocaleString() : '—'}</p>
+            </div>
+            <div>
+              <span class="text-xs text-dash-muted-fg">Output Tokens</span>
+              <p class="text-lg font-semibold">${metrics.output_tokens != null ? metrics.output_tokens.toLocaleString() : '—'}</p>
+            </div>
+            <div class="col-span-2">
+              <span class="text-xs text-dash-muted-fg">Tools Used</span>
+              <div class="mt-1 flex flex-wrap gap-1">${toolsHTML}</div>
+            </div>
+            <div class="col-span-2 flex items-center justify-between rounded-lg bg-dash-card p-3 border border-dash-border">
+              ${bookedHTML}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cost Breakdown -->
+      <div class="detail-accordion flex flex-col rounded-lg border border-dash-border bg-dash-muted/30 overflow-hidden min-h-0">
+        <button onclick="toggleAccordion(this)" class="flex items-center justify-between px-4 py-2.5 shrink-0 hover:bg-dash-muted/50 transition-colors">
+          <h4 class="text-sm font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-base">payments</span>
+            Estimated Cost ${cost.hasData ? '<span class="text-xs font-mono text-primary ml-1">' + cost.total + '</span>' : ''}
+          </h4>
+          <span class="material-symbols-outlined accordion-chevron text-dash-muted-fg" style="font-size:18px;transition:transform 200ms">expand_more</span>
+        </button>
+        <div class="accordion-body overflow-y-auto custom-scroll p-4 border-t border-dash-border">
+          ${cost.hasData ? `
+          <div class="space-y-2 text-sm">
+            ${cost.lines.map(l => `
+              <div class="flex justify-between">
+                <span class="text-dash-muted-fg">${l.label}</span>
+                <span class="font-mono">${l.value}</span>
+              </div>`).join('')}
+            <div class="border-t border-dash-border pt-2 mt-2 flex justify-between font-semibold">
+              <span>Total</span>
+              <span class="font-mono text-primary">${cost.total}</span>
+            </div>
+          </div>` : '<p class="text-xs text-dash-muted-fg">No cost data available for this session</p>'}
+        </div>
+      </div>
+
     </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Accordion
+// ---------------------------------------------------------------------------
+function toggleAccordion(btn) {
+  const section = btn.closest('.detail-accordion');
+  const isOpen = section.classList.contains('open');
+  // Close all
+  const container = section.parentElement;
+  container.querySelectorAll('.detail-accordion').forEach(s => {
+    s.classList.remove('open');
+  });
+  // Open clicked (if it was closed)
+  if (!isOpen) {
+    section.classList.add('open');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cost Calculation
+// ---------------------------------------------------------------------------
+// Pricing rates (update these if pricing changes)
+const PRICING = {
+  claude_input_per_1m:  3.00,   // Claude Sonnet input tokens
+  claude_output_per_1m: 15.00,  // Claude Sonnet output tokens
+  twilio_per_min:       0.0085, // Twilio inbound voice per minute
+  deepgram_stt_per_min: 0.0043, // Deepgram Nova STT per minute
+  deepgram_tts_per_1k:  0.015,  // Deepgram Aura TTS per 1K characters
+};
+
+function computeSessionCost(session, metrics) {
+  const lines = [];
+  let total = 0;
+  let hasData = false;
+
+  // Claude API cost
+  if (metrics.input_tokens != null && metrics.output_tokens != null) {
+    hasData = true;
+    const inputCost = (metrics.input_tokens / 1_000_000) * PRICING.claude_input_per_1m;
+    const outputCost = (metrics.output_tokens / 1_000_000) * PRICING.claude_output_per_1m;
+    const claudeTotal = inputCost + outputCost;
+    total += claudeTotal;
+    lines.push({
+      label: `Claude API (${metrics.input_tokens.toLocaleString()} in / ${metrics.output_tokens.toLocaleString()} out)`,
+      value: '$' + claudeTotal.toFixed(4),
+    });
+  }
+
+  // Voice-only costs
+  if (session.channel === 'voice') {
+    // Duration in minutes (from session start/end)
+    let durationMin = 0;
+    if (session.started_at) {
+      const start = new Date(session.started_at);
+      const end = session.ended_at ? new Date(session.ended_at) : new Date();
+      durationMin = Math.max(0, (end - start) / 60000);
+    }
+
+    if (durationMin > 0) {
+      hasData = true;
+
+      // Twilio
+      const twilioCost = durationMin * PRICING.twilio_per_min;
+      total += twilioCost;
+      lines.push({
+        label: `Twilio (${durationMin.toFixed(1)} min)`,
+        value: '$' + twilioCost.toFixed(4),
+      });
+
+      // Deepgram STT
+      const sttCost = durationMin * PRICING.deepgram_stt_per_min;
+      total += sttCost;
+      lines.push({
+        label: `Deepgram STT (${durationMin.toFixed(1)} min)`,
+        value: '$' + sttCost.toFixed(4),
+      });
+    }
+
+    // Deepgram TTS
+    if (metrics.tts_characters != null && metrics.tts_characters > 0) {
+      const ttsCost = (metrics.tts_characters / 1000) * PRICING.deepgram_tts_per_1k;
+      total += ttsCost;
+      lines.push({
+        label: `Deepgram TTS (${metrics.tts_characters.toLocaleString()} chars)`,
+        value: '$' + ttsCost.toFixed(4),
+      });
+    }
+  }
+
+  return {
+    hasData,
+    lines,
+    total: '$' + total.toFixed(4),
+  };
 }
 
 // ---------------------------------------------------------------------------

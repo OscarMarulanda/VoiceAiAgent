@@ -95,8 +95,10 @@ Staff ──► Admin UI ─────┤  ┌──────────�
 - Supports session resumption (chat widget reconnects with existing session_id)
 
 ### 8. Admin Dashboard
-- Simple web UI served by FastAPI (Jinja2 templates or static HTML + JS)
+- Single-file SPA served by FastAPI (Tailwind CDN + ApexCharts)
 - Shows: active/recent conversations, booked appointments, agent performance
+- Session detail with accordion sections: Transcript, Metrics, Estimated Cost
+- Per-session cost breakdown: Claude API tokens, Twilio minutes, Deepgram STT/TTS
 - Read-only for MVP (no editing bookings from dashboard)
 
 ## Data Flow: Voice Call

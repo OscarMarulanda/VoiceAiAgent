@@ -135,6 +135,8 @@ class CallSession:
         # Token usage tracking
         self._metrics_input_tokens: int = 0
         self._metrics_output_tokens: int = 0
+        # TTS character tracking (for cost calculation)
+        self._metrics_tts_characters: int = 0
         # Language detection
         self._lang: str = "en"
         self._lang_detected: bool = False
@@ -227,6 +229,7 @@ class CallSession:
             "input_tokens": self._metrics_input_tokens,
             "output_tokens": self._metrics_output_tokens,
             "total_tokens": self._metrics_input_tokens + self._metrics_output_tokens,
+            "tts_characters": self._metrics_tts_characters,
         }
         if turns > 0:
             metrics["avg_agent_ms"] = round(self._metrics_agent_ms_total / turns, 0)
@@ -423,6 +426,7 @@ class CallSession:
         if self._ended:
             return
 
+        self._metrics_tts_characters += len(text)
         self.is_speaking = True
         self._tts_cancelled = False
 

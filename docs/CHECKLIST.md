@@ -205,6 +205,12 @@ Phased checklist for building the AI Voice & Chat Agent. Each phase builds on th
 - [x] Add sendgrid_api_key to Settings config
 - [x] Push to GitHub (https://github.com/OscarMarulanda/VoiceAiAgent)
 - [x] Add README.md
+- [x] Add per-session cost breakdown in dashboard (Claude API, Twilio, Deepgram STT/TTS)
+- [x] Add chat session token tracking (parity with voice sessions)
+- [x] Add TTS character tracking for voice sessions
+- [x] Make chat widget launcher draggable
+- [x] Refactor session detail into accordion (Transcript, Metrics, Estimated Cost)
+- [x] Upgrade STT from Deepgram Nova-2 to Nova-3
 
 ## Phase 7: MCP Server (Bonus)
 - [ ] Install MCP Python SDK

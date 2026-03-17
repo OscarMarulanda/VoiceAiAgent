@@ -102,8 +102,14 @@
       z-index: 999999;
     }
     .launcher:hover {
-      transform: scale(1.08);
       background: var(--primary-dark);
+    }
+    .launcher:not(.dragging):hover {
+      transform: scale(1.08);
+    }
+    .launcher.dragging {
+      cursor: grabbing;
+      transition: none;
     }
     .launcher svg {
       width: 26px;
@@ -422,7 +428,41 @@
     launcher.className = "launcher";
     launcher.setAttribute("aria-label", "Open chat");
     launcher.innerHTML = ICON_CHAT;
-    launcher.addEventListener("click", toggleOpen);
+    // Drag support for launcher — drag to reposition, click to open
+    let _dragStartX, _dragStartY, _dragOrigX, _dragOrigY, _dragged;
+
+    launcher.addEventListener("mousedown", (e) => {
+      _dragged = false;
+      _dragStartX = e.clientX;
+      _dragStartY = e.clientY;
+      const rect = launcher.getBoundingClientRect();
+      _dragOrigX = rect.left;
+      _dragOrigY = rect.top;
+      launcher.classList.add("dragging");
+
+      function onMove(ev) {
+        const dx = ev.clientX - _dragStartX;
+        const dy = ev.clientY - _dragStartY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) _dragged = true;
+        if (!_dragged) return;
+        launcher.style.left = (_dragOrigX + dx) + "px";
+        launcher.style.top = (_dragOrigY + dy) + "px";
+        launcher.style.right = "auto";
+        launcher.style.bottom = "auto";
+      }
+
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        launcher.classList.remove("dragging");
+        if (!_dragged) toggleOpen();
+      }
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      e.preventDefault();
+    });
+
     root.appendChild(launcher);
 
     // Chat window
