@@ -159,7 +159,7 @@ async def get_providers_and_appointments_by_type(
             AND a.starts_at >= $2
             AND a.starts_at < $3
             AND a.status = 'confirmed'
-        WHERE LOWER(at.name) = LOWER($1)
+        WHERE LOWER(at.name) LIKE '%%' || LOWER($1) || '%%'
         GROUP BY p.id, p.name, p.available_days, p.working_hours,
                  at.name, at.duration_minutes
         """,

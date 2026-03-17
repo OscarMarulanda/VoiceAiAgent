@@ -176,7 +176,7 @@ This lets you type messages and see agent responses in the terminal. Requires th
 | `uvicorn` | ASGI server |
 | `anthropic` | Claude API client |
 | `deepgram-sdk` | Deepgram STT client |
-| `elevenlabs` | ElevenLabs TTS client |
+| `elevenlabs` | ElevenLabs TTS client (legacy — TTS now uses Deepgram Aura-2 via httpx) |
 | `twilio` | Twilio helper library |
 | `pydantic` | Data validation and models |
 | `pydantic-settings` | Settings from environment |

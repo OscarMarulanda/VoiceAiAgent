@@ -52,7 +52,7 @@ class DeepgramSTT:
         client = AsyncDeepgramClient(api_key=settings.deepgram_api_key)
 
         self._ctx = client.listen.v1.connect(
-            model="nova-2",
+            model="nova-3",
             encoding="mulaw",
             sample_rate="8000",
             interim_results="true",

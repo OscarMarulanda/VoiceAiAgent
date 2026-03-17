@@ -326,12 +326,13 @@ def _format_slots(slots) -> list[dict]:
     """Format TimeSlot objects for Claude output. Slots are already in local time."""
     return [
         {
+            "slot_number": i + 1,
             "start": s.start.isoformat(),
             "end": s.end.isoformat(),
             "day": s.start.strftime("%A"),
-            "display": s.start.strftime("%A, %B %d at %I:%M %p"),
+            "display": f"Slot {i + 1}: {s.start.strftime('%A, %B %d at %I:%M %p')} (use starts_at: {s.start.isoformat()})",
         }
-        for s in slots
+        for i, s in enumerate(slots)
     ]
 
 

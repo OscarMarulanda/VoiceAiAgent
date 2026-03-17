@@ -7,7 +7,7 @@ import time
 
 from fastapi import WebSocket
 
-from app.agent.core import process_message
+from app.agent.core import process_message, get_last_turn_usage
 from app.repositories import session_repo
 from app.voice.stt import DeepgramSTT
 from app.voice import tts
@@ -30,29 +30,69 @@ _AGENT_TIMEOUT_S = 15.0
 _SILENCE_WARNING_S = 20.0  # "Are you still there?"
 _SILENCE_HANGUP_S = 30.0   # End the call
 
-_SILENCE_WARNING_TEXT = "Are you still there? I'm here to help if you need anything."
-_SILENCE_HANGUP_TEXT = "It seems we got disconnected. Goodbye!"
+_SILENCE_WARNING_TEXT = {
+    "en": "Are you still there? I'm here to help if you need anything.",
+    "es": "¿Sigues ahí? Estoy aquí para ayudarte.",
+}
+_SILENCE_HANGUP_TEXT = {
+    "en": "It seems we got disconnected. Goodbye!",
+    "es": "Parece que nos desconectamos. ¡Adiós!",
+}
 
 # Farewell detection — skip agent and respond immediately.
 # Must be strict to avoid false positives like "No, that's too early."
 _FAREWELL_RE = re.compile(
     r"^("
-    r"no[\.,]?\s*thank(s|\s*you)"
+    # English
+    r"no[\.,]?\s*thank(s|\s*you).*"
     r"|no[\.,]?\s*i'?m good"
     r"|no[\.,]?\s*nothing else"
     r"|no[\.,]?\s*that'?s (all|it)\b"
     r"|nope[\.,]?\s*that'?s (all|it)\b"
-    r"|that'?s (all|it)\b"
+    r"|that'?s (all|it)\b.*"
     r"|good\s*bye"
     r"|bye[\.\s]*"
     r"|have a (good|great|nice)\b.*"
     r"|see you\b.*"
     r"|nothing else"
+    # Spanish
+    r"|no[\.,]?\s*gracias"
+    r"|no[\.,]?\s*eso es todo"
+    r"|no[\.,]?\s*nada m[aá]s"
+    r"|eso es todo"
+    r"|nada m[aá]s"
+    r"|hasta luego"
+    r"|adi[oó]s"
+    r"|chao"
+    r"|que (te|le) vaya bien"
+    # Common Deepgram mistranscriptions of Spanish farewells
+    r"|no[\.,]?\s*that\s*is"
+    r"|no[\.,]?\s*that'?s\s*you"
     r")[\.\!\s]*$",
     re.IGNORECASE,
 )
 
-_FAREWELL_RESPONSE = "Thank you for calling Sunshine Dental! Have a great day. Goodbye!"
+_FAREWELL_RESPONSE = {
+    "en": "Thank you for calling Sunshine Dental! Have a great day. Goodbye!",
+    "es": "¡Gracias por llamar a Sunshine Dental! ¡Que tengas un excelente día! ¡Adiós!",
+}
+
+# Detect if the agent's response is a goodbye — disconnect STT to prevent interruption
+_AGENT_GOODBYE_RE = re.compile(
+    r"goodbye|bye|have a (good|great|nice|wonderful)\s+(day|evening|night|one)"
+    r"|nos vemos|adi[oó]s|buena(s)?\s*(noches?|tardes?|d[ií]as?|suerte)"
+    r"|que (te|le) vaya|hasta luego|cu[ií]date",
+    re.IGNORECASE,
+)
+
+# Simple Spanish detection — presence of Spanish-specific characters or common words
+_SPANISH_RE = re.compile(
+    r"[ñ¿¡áéíóúü]"
+    r"|(?<!\w)(?:hola|buenos?\s*d[ií]as|buenas?\s*tardes|buenas?\s*noches"
+    r"|por\s*favor|porfa|gracias|quiero|necesito|puedo|cita|limpieza"
+    r"|mañana|doctor[a]?|tengo|para|una?|el|la|los|las|del|con)(?!\w)",
+    re.IGNORECASE,
+)
 
 
 class CallSession:
@@ -92,6 +132,12 @@ class CallSession:
         self._metrics_tools_used: set[str] = set()
         self._metrics_appointment_booked: bool = False
         self._metrics_outcome: str = "completed"  # completed, abandoned, error
+        # Token usage tracking
+        self._metrics_input_tokens: int = 0
+        self._metrics_output_tokens: int = 0
+        # Language detection
+        self._lang: str = "en"
+        self._lang_detected: bool = False
 
     async def start(self, caller_number: str | None = None) -> None:
         """Initialize the call: create agent session, connect STT, play greeting."""
@@ -123,9 +169,12 @@ class CallSession:
 
     async def handle_audio(self, payload: str) -> None:
         """Forward base64-encoded Twilio audio to Deepgram."""
-        if self._stt is not None:
-            audio_bytes = base64.b64decode(payload)
-            await self._stt.send_audio(audio_bytes)
+        if self._stt is not None and not self._ended:
+            try:
+                audio_bytes = base64.b64decode(payload)
+                await self._stt.send_audio(audio_bytes)
+            except Exception:
+                pass  # STT already closed (call ending)
 
     async def stop(self) -> None:
         """Clean up: close STT, cancel timers, persist metrics, end agent session."""
@@ -175,6 +224,9 @@ class CallSession:
             "tools_used": sorted(self._metrics_tools_used),
             "appointment_booked": self._metrics_appointment_booked,
             "outcome": self._metrics_outcome,
+            "input_tokens": self._metrics_input_tokens,
+            "output_tokens": self._metrics_output_tokens,
+            "total_tokens": self._metrics_input_tokens + self._metrics_output_tokens,
         }
         if turns > 0:
             metrics["avg_agent_ms"] = round(self._metrics_agent_ms_total / turns, 0)
@@ -221,9 +273,14 @@ class CallSession:
         """Fire after silence — flush whatever is in the buffer."""
         try:
             await asyncio.sleep(_BUFFER_TIMEOUT_S)
-            await self._flush_buffer()
         except asyncio.CancelledError:
-            pass  # Timer cancelled because new transcript arrived
+            return  # Timer cancelled because new transcript arrived
+
+        # Clear self-reference so _on_transcript can't cancel us mid-processing
+        self._buffer_timer = None
+
+        try:
+            await self._flush_buffer()
         except Exception:
             logger.exception("Error in buffer timeout")
 
@@ -242,11 +299,25 @@ class CallSession:
         if not full_text:
             return
 
+        # Detect language from first substantial transcript
+        if not self._lang_detected:
+            self._lang_detected = True
+            if _SPANISH_RE.search(full_text):
+                self._lang = "es"
+                logger.info("Language detected: Spanish")
+                if self.session_id:
+                    asyncio.create_task(session_repo.update_language(self.session_id, "es"))
+
         # Farewell detection — respond instantly without hitting the agent
         if _FAREWELL_RE.search(full_text):
             logger.info("Farewell detected: %s", full_text)
+            # Disconnect STT so VAD can't trigger interruption during goodbye
+            if self._stt is not None:
+                await self._stt.close()
+                self._stt = None
             async with self._processing_lock:
-                await self._speak(_FAREWELL_RESPONSE)
+                await self._speak(_FAREWELL_RESPONSE[self._lang], restart_silence_timer=False)
+            await self._end_call()
             return
 
         async with self._processing_lock:
@@ -307,13 +378,29 @@ class CallSession:
 
         agent_ms = (time.monotonic() - agent_start) * 1000
 
+        # Accumulate token usage
+        usage = get_last_turn_usage()
+        self._metrics_input_tokens += usage["input_tokens"]
+        self._metrics_output_tokens += usage["output_tokens"]
+
         logger.info("Agent response: %s", response_text)
+
+        # If agent is saying goodbye, disconnect STT to prevent interruption
+        is_goodbye = bool(_AGENT_GOODBYE_RE.search(response_text))
+        if is_goodbye:
+            logger.info("Agent goodbye detected — disconnecting STT")
+            if self._stt is not None:
+                await self._stt.close()
+                self._stt = None
 
         # Track TTS first-chunk latency (ADR-035)
         self._tts_first_chunk_t = time.monotonic()
         self._turn_start_t = turn_start
         self._agent_ms = agent_ms
-        await self._speak(response_text)
+        await self._speak(response_text, restart_silence_timer=not is_goodbye)
+
+        if is_goodbye:
+            await self._end_call()
 
     async def _play_filler_after_delay(self) -> None:
         """Wait _FILLER_DELAY_S, then play a cached filler phrase.
@@ -322,7 +409,7 @@ class CallSession:
         """
         try:
             await asyncio.sleep(_FILLER_DELAY_S)
-            filler = tts.get_random_filler()
+            filler = tts.get_random_filler(lang=self._lang)
             if filler:
                 logger.info("Playing filler while agent is thinking")
                 await self._send_audio_to_twilio(filler)
@@ -340,7 +427,7 @@ class CallSession:
         self._tts_cancelled = False
 
         try:
-            async for chunk in tts.synthesize_stream(text):
+            async for chunk in tts.synthesize_stream(text, lang=self._lang):
                 if self._tts_cancelled:
                     break
                 await self._send_audio_to_twilio(chunk)
@@ -442,7 +529,7 @@ class CallSession:
                         _SILENCE_WARNING_S, self.session_id)
             self._silence_warning_sent = True
             async with self._processing_lock:
-                await self._speak(_SILENCE_WARNING_TEXT, restart_silence_timer=False)
+                await self._speak(_SILENCE_WARNING_TEXT[self._lang], restart_silence_timer=False)
 
             # Wait for hangup threshold (remaining time after warning)
             await asyncio.sleep(_SILENCE_HANGUP_S - _SILENCE_WARNING_S)
@@ -454,7 +541,7 @@ class CallSession:
                         _SILENCE_HANGUP_S, self.session_id)
             self._metrics_outcome = "abandoned"
             async with self._processing_lock:
-                await self._speak(_SILENCE_HANGUP_TEXT, restart_silence_timer=False)
+                await self._speak(_SILENCE_HANGUP_TEXT[self._lang], restart_silence_timer=False)
 
             # End the call
             await self._end_call()

@@ -183,9 +183,9 @@ Phased checklist for building the AI Voice & Chat Agent. Each phase builds on th
 - [x] Test dashboard with real session data (voice call with metrics confirmed working)
 
 ## Phase 6: Polish & Integration Testing
-- [ ] Test full voice flow end-to-end (call → book appointment → verify in dashboard)
+- [x] Test full voice flow end-to-end (call → book appointment → verify in dashboard)
 - [ ] Test full chat flow end-to-end (widget → book appointment → verify in dashboard)
-- [ ] Test bilingual voice flow (Spanish call)
+- [x] Test bilingual voice flow (Spanish call)
 - [ ] Test bilingual chat flow (Spanish chat)
 - [ ] Test error scenarios (slow response, unclear input)
 - [ ] Test concurrent sessions (two calls at once, or call + chat)
@@ -193,6 +193,18 @@ Phased checklist for building the AI Voice & Chat Agent. Each phase builds on th
 - [ ] Add rate limiting
 - [ ] Add request logging
 - [ ] Performance optimization (latency reduction if needed)
+- [x] Fix buffer timer race condition — short transcripts silently cancelled when new transcript arrived mid-processing
+- [x] Fix dashboard timezone bug — `calUTCtoLocal` double-converted times when browser timezone != practice timezone
+- [x] Add bilingual TTS — separate Deepgram Aura-2 voices per language (EN: aura-2-asteria-en, ES: aura-2-selena-es)
+- [x] Add language detection — regex-based detection from first transcript, persisted to session DB
+- [x] Add Spanish farewell detection + common Deepgram mistranscription patterns
+- [x] Fix farewell interruption — disconnect STT before playing goodbye to prevent VAD cutoff
+- [x] Add agent goodbye detection — if agent response contains goodbye language, disconnect STT + end call
+- [x] Add token usage tracking — per-turn logging + session-level metrics + dashboard display
+- [x] Fix slot confusion — numbered slots with inline ISO timestamps prevent Claude from booking wrong times
+- [x] Add sendgrid_api_key to Settings config
+- [x] Push to GitHub (https://github.com/OscarMarulanda/VoiceAiAgent)
+- [x] Add README.md
 
 ## Phase 7: MCP Server (Bonus)
 - [ ] Install MCP Python SDK

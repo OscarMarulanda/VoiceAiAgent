@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_phone_number: str = ""
 
+    # SendGrid (Email)
+    sendgrid_api_key: str = ""
+
     # Database
     database_url: str = "postgresql://localhost/voiceagent"
 

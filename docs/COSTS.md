@@ -272,6 +272,7 @@ Shared widely, 20-30 interactions/day.
 
 All other services currently on free tiers:
 - Deepgram: Free $200 credit (covers both STT and TTS — ADR-039)
-- ElevenLabs: No longer used (free tier exhausted, replaced by Deepgram Aura — ADR-039)
+- ElevenLabs: No longer used (replaced by Deepgram Aura-2 — ADR-039)
+  - English voice: aura-2-asteria-en, Spanish voice: aura-2-selena-es
 - ngrok: Free tier (domain: arie-euphotic-nonpictorially.ngrok-free.dev)
 - Supabase: Free tier

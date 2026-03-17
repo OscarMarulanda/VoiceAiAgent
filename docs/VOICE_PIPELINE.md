@@ -11,8 +11,8 @@ Patient's Phone
       │
       ▼
 ┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Twilio   │────►│  Deepgram    │────►│  Claude API  │────►│  ElevenLabs  │
-│  (call)   │◄────│  (STT)       │     │  (agent)     │     │  (TTS)       │
+│  Twilio   │────►│  Deepgram    │────►│  Claude API  │────►│  Deepgram    │
+│  (call)   │◄────│  Nova-2 STT  │     │  (agent)     │     │  Aura-2 TTS  │
 └──────────┘     └──────────────┘     └──────────────┘     └──────────────┘
    mulaw            text                  text                 audio
    8kHz             transcript            response             stream
@@ -69,8 +69,11 @@ Patient's Phone
 
 ### Phase 3b: Farewell Detection (ADR-032)
 
-10. Before sending to the agent, check if the text matches a farewell pattern ("no thank you", "bye", "that's all", etc.)
-    - If farewell: skip agent entirely, play canned farewell TTS, call ends
+10. Before sending to the agent, check if the text matches a farewell pattern
+    - English: "no thank you", "bye", "that's all", etc.
+    - Spanish: "no gracias", "adiós", "hasta luego", "nada más", etc.
+    - Common Deepgram mistranscriptions: "No. That is.", "No. That's you." (misheard Spanish farewells)
+    - If farewell: disconnect STT (prevents interruption), play language-appropriate farewell TTS, end call gracefully
     - If not farewell: proceed to agent processing
 
 ### Phase 4: Processing (AI Thinks — ADR-031)
@@ -86,8 +89,12 @@ Patient's Phone
 ### Phase 5: Responding (AI Speaks)
 
 15. Agent Core returns the text response (1-2 sentences for voice — ADR-029)
-16. We send the text to ElevenLabs TTS API (streaming endpoint)
-17. ElevenLabs streams back audio chunks in ulaw_8000 format (ADR-024 — no conversion needed)
+15b. If agent response contains goodbye language ("Have a great day!", "¡Adiós!", etc.):
+    - Disconnect STT to prevent VAD interruption during goodbye
+    - After TTS finishes, end call gracefully
+16. We send the text to Deepgram Aura-2 TTS API (streaming endpoint)
+    - English calls use `aura-2-asteria-en`, Spanish calls use `aura-2-selena-es`
+17. Deepgram streams back audio chunks in mulaw/8kHz format (raw bytes, no conversion needed)
 18. We forward each chunk to Twilio via the Media Stream WebSocket:
     ```json
     {
@@ -116,11 +123,11 @@ Patient's Phone
 | Stage | Format | Sample Rate | Encoding |
 |-------|--------|-------------|----------|
 | Twilio → Us | mulaw | 8kHz | base64 |
-| Us → Deepgram | PCM (linear16) or mulaw | 8kHz | raw bytes |
-| ElevenLabs → Us | mulaw (requested) | 8kHz | raw bytes |
+| Us → Deepgram STT | mulaw | 8kHz | raw bytes |
+| Deepgram TTS → Us | mulaw (requested) | 8kHz | raw bytes |
 | Us → Twilio | mulaw | 8kHz | base64 |
 
-**Decision (ADR-024):** We request `ulaw_8000` directly from ElevenLabs — no conversion needed. Audio goes straight from ElevenLabs → base64 encode → Twilio. Fallback: convert from PCM 22050Hz → mulaw 8kHz using `audioop-lte` if quality is poor.
+**Decision (ADR-024, ADR-039):** We request mulaw/8kHz directly from Deepgram Aura-2 TTS — no conversion needed. Audio goes straight from Deepgram → base64 encode → Twilio.
 
 ---
 
@@ -134,8 +141,8 @@ Patient's Phone
 
 ### 2. Pre-Generated Audio (ADR-027, ADR-031)
 - **Greeting message:** Pre-generate at app startup, cache as bytes in memory, play instantly on call connect
-- **Filler phrases (ADR-031):** 4 phrases pre-generated at startup, played randomly when agent takes >1.5s
-- Error messages: Pre-generate for instant playback (future)
+- **Filler phrases (ADR-031):** 8 phrases pre-generated at startup (4 English, 4 Spanish), played randomly when agent takes >1.5s — matched to detected session language
+- **Error message:** Pre-generate at startup for instant playback on TTS/STT failures
 
 ### 3. Interruption Handling (ADR-026)
 - **Decided approach:** Stop TTS immediately when Deepgram detects patient speech (VAD event)
@@ -149,8 +156,10 @@ Patient's Phone
 - Prevents digit-by-digit dictation from triggering individual agent responses
 
 ### 5. Farewell Detection (ADR-032)
-- Regex-based detection of common farewells ("no thank you", "bye", "that's all")
-- Matching farewells skip agent entirely — instant canned TTS response
+- Regex-based detection of common farewells in English and Spanish
+- Includes patterns for common Deepgram mistranscriptions of Spanish farewells
+- Matching farewells: disconnect STT → play language-appropriate farewell → end call
+- Agent goodbye detection: if agent's response contains goodbye language, also disconnect STT before TTS to prevent interruption
 - Strict regex to avoid false positives (e.g., "No. That's too early" does NOT match)
 
 ---
@@ -181,18 +190,23 @@ Patient's Phone
 | Deepgram returns empty/low-confidence | Check confidence score | Ask patient to repeat |
 | Claude API timeout | asyncio.wait_for with 15s timeout | Filler plays at 1.5s (ADR-031), graceful error message at 15s |
 | Claude API error | Exception handling | Apologize, offer to try again |
-| ElevenLabs timeout | asyncio.wait_for with 3s timeout | Fall back to Twilio `<Say>` (robotic but functional) |
-| ElevenLabs error | Exception handling | Same fallback |
+| Deepgram TTS timeout | httpx 15s timeout | Play pre-cached error clip |
+| Deepgram TTS error | Exception handling | Play pre-cached error clip |
 | Twilio WebSocket drops | Connection close event | Session ends, log for dashboard |
 
 ---
 
 ## Language Detection for Bilingual Support
 
-**Approach:** Let Deepgram and Claude handle it naturally.
+**Approach:** Detect language from the first transcript and switch the full pipeline.
 
-1. **Deepgram**: Configure for multi-language (en + es). It detects the language automatically.
-2. **Claude**: System prompt instructs: "If the patient speaks in Spanish, respond in Spanish. If English, respond in English."
-3. **ElevenLabs**: Use a multilingual voice model that handles both English and Spanish.
+1. **Deepgram STT**: Configured for multi-language (`language="multi"`). Transcribes both English and Spanish.
+2. **Language detection**: On the first substantial transcript, a regex (`_SPANISH_RE`) checks for Spanish-specific characters (ñ, ¿, ¡, accented vowels) and common Spanish words. If matched, session language is set to "es" and persisted to DB.
+3. **Claude**: System prompt instructs: "Detect the language the patient is using and respond in the same language."
+4. **Deepgram TTS**: Uses separate voice models per language:
+   - English: `aura-2-asteria-en`
+   - Spanish: `aura-2-selena-es` (Latin American neutral)
+5. **Fillers**: 4 English + 4 Spanish phrases pre-cached at startup, selected based on detected language.
+6. **Farewell/silence messages**: Language-appropriate versions for both English and Spanish.
 
-No explicit language detection code needed — the AI stack handles it end-to-end.
+**Note on codeswitching:** Deepgram offers codeswitching voices that handle both languages, but testing showed they mix Spanish pronunciation into English responses (e.g., Spanish-accented numbers). Separate voices give cleaner results.

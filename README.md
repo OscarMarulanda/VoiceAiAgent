@@ -41,8 +41,8 @@ Staff ──► Admin UI ─────┤  ┌──────────�
 |-----------|------------|
 | Backend | FastAPI + Uvicorn |
 | AI | Claude API (Anthropic) with tool calling |
-| Speech-to-Text | Deepgram Nova-2 (streaming) |
-| Text-to-Speech | Deepgram Aura |
+| Speech-to-Text | Deepgram Nova-2 (streaming, multi-language) |
+| Text-to-Speech | Deepgram Aura-2 (EN: asteria, ES: selena) |
 | Telephony | Twilio Voice + Media Streams |
 | Database | PostgreSQL via asyncpg (raw SQL, no ORM) |
 | Email | SendGrid |

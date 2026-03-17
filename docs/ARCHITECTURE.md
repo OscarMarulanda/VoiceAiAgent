@@ -33,10 +33,11 @@ Staff ──► Admin UI ─────┤  ┌──────────�
 
 ### 2. Voice Pipeline (Call Session Pattern — ADR-028)
 - Each phone call gets a **CallSession** object that owns the full lifecycle
-- CallSession orchestrates: audio in → Deepgram STT → Agent Core → ElevenLabs TTS → audio back to Twilio
+- CallSession orchestrates: audio in → Deepgram STT → Agent Core → Deepgram Aura-2 TTS → audio back to Twilio
 - State per call: `is_speaking` flag, `stream_sid`, Deepgram connection
 - Interruption handling: stops TTS when patient speaks (Twilio `clear` event — ADR-026)
 - STT and TTS are stateless service wrappers — swappable without touching session logic
+- Language detection on first transcript → switches TTS voice model, fillers, farewell messages
 - Pre-generated greeting plays instantly on call connect (ADR-027)
 - Handles 10-50 concurrent calls per server instance; scales horizontally or via event-driven migration
 
@@ -68,6 +69,7 @@ Staff ──► Admin UI ─────┤  ┌──────────�
 - Channel-aware system prompt: voice gets a short-response addendum (ADR-029)
 - Dynamic date reference table injected every turn (prevents Claude date math errors)
 - Handles language detection and bilingual responses
+- Token usage logged per turn (input/output tokens tracked in session metrics)
 
 ### 5. Mock MacPractice Data Layer (PostgreSQL)
 - Simulates MacPractice's scheduling and practice management system

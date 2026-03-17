@@ -668,6 +668,14 @@ function detailHTML(s) {
           <span class="text-xs text-dash-muted-fg">Avg Response</span>
           <p class="text-lg font-semibold">${avgResponse}</p>
         </div>
+        <div>
+          <span class="text-xs text-dash-muted-fg">Input Tokens</span>
+          <p class="text-lg font-semibold">${metrics.input_tokens != null ? metrics.input_tokens.toLocaleString() : '—'}</p>
+        </div>
+        <div>
+          <span class="text-xs text-dash-muted-fg">Output Tokens</span>
+          <p class="text-lg font-semibold">${metrics.output_tokens != null ? metrics.output_tokens.toLocaleString() : '—'}</p>
+        </div>
         <div class="col-span-2">
           <span class="text-xs text-dash-muted-fg">Tools Used</span>
           <div class="mt-1 flex flex-wrap gap-1">${toolsHTML}</div>
@@ -1064,7 +1072,7 @@ function calAppointmentBlockHTML(apt, color, col = 0, totalCols = 1) {
   const opacity = cancelled ? 'opacity-50' : '';
   const strike = cancelled ? 'line-through' : '';
 
-  const startTimeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ });
+  const startTimeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, });
 
   // Calculate horizontal position for overlap layout
   const widthPct = (1 / totalCols) * 100;
@@ -1124,9 +1132,9 @@ function calShowPopup(event, aptId) {
 
   const localStart = calUTCtoLocal(apt.starts_at);
   const endTime = new Date(localStart.getTime() + apt.duration_minutes * 60000);
-  const timeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ })
-    + ' – ' + endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ });
-  const dateStr = localStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PRACTICE_TZ });
+  const timeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, })
+    + ' – ' + endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, });
+  const dateStr = localStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', });
 
   const prov = calProviders.find(p => p.id === apt.provider_id);
   const provColor = prov ? prov.color : '#6366f1';
@@ -1189,8 +1197,18 @@ document.addEventListener('click', (e) => {
 // Calendar — Utilities
 // ---------------------------------------------------------------------------
 function calUTCtoLocal(isoStr) {
+  // Extract the practice-local hours/minutes by formatting with the practice TZ,
+  // then parsing the parts. This avoids the double-conversion bug where
+  // new Date(toLocaleString()) re-interprets in the browser's local timezone.
   const d = new Date(isoStr);
-  return new Date(d.toLocaleString('en-US', { timeZone: PRACTICE_TZ }));
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PRACTICE_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = type => parts.find(p => p.type === type)?.value;
+  return new Date(+get('year'), +get('month') - 1, +get('day'), +get('hour') % 24, +get('minute'), +get('second'));
 }
 
 function calFormatDateISO(d) {

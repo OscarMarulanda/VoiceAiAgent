@@ -2,6 +2,9 @@
 
 Provides streaming TTS in mulaw/8000 format for Twilio, plus pre-generated
 audio caches for greeting, filler phrases, and error clips.
+
+Supports bilingual output (English and Spanish) by switching Deepgram voice
+models based on the session language.
 """
 
 import logging
@@ -14,14 +17,17 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Deepgram Aura voice model — handles English and Spanish
-MODEL = "aura-asteria-en"
+# Deepgram Aura-2 voice models per language
+_MODELS = {
+    "en": "aura-2-asteria-en",
+    "es": "aura-2-selena-es",
+}
 
 # Base URL for Deepgram TTS
 _BASE_URL = "https://api.deepgram.com/v1/speak"
 
-# Query params: mulaw encoding, 8kHz sample rate, no WAV container (raw bytes)
-_PARAMS = {"model": MODEL, "encoding": "mulaw", "sample_rate": "8000", "container": "none"}
+# Base query params (model added per-request based on language)
+_BASE_PARAMS = {"encoding": "mulaw", "sample_rate": "8000", "container": "none"}
 
 # Greeting text for pre-generation (ADR-027)
 GREETING_TEXT = (
@@ -29,13 +35,21 @@ GREETING_TEXT = (
     "How can I help you today?"
 )
 
-# Filler phrases — played while agent is thinking (pre-cached at startup)
-FILLER_PHRASES = [
-    "Let me check on that for you.",
-    "One moment, please.",
-    "Sure, let me look that up.",
-    "Let me see what we have available.",
-]
+# Filler phrases per language — played while agent is thinking (pre-cached at startup)
+FILLER_PHRASES = {
+    "en": [
+        "Let me check on that for you.",
+        "One moment, please.",
+        "Sure, let me look that up.",
+        "Let me see what we have available.",
+    ],
+    "es": [
+        "Déjame verificar eso.",
+        "Un momento, por favor.",
+        "Claro, déjame revisar.",
+        "Déjame ver qué tenemos disponible.",
+    ],
+}
 
 # Error message — pre-cached for TTS/STT failure fallback (ADR-035)
 ERROR_TEXT = (
@@ -45,7 +59,7 @@ ERROR_TEXT = (
 
 # Module-level caches
 _greeting_audio: bytes | None = None
-_filler_audio: list[bytes] = []
+_filler_audio: dict[str, list[bytes]] = {"en": [], "es": []}
 _error_audio: bytes | None = None
 
 
@@ -56,7 +70,13 @@ def _headers() -> dict[str, str]:
     }
 
 
-async def synthesize_stream(text: str) -> AsyncIterator[bytes]:
+def _params_for_lang(lang: str = "en") -> dict[str, str]:
+    """Build query params with the correct voice model for the given language."""
+    model = _MODELS.get(lang, _MODELS["en"])
+    return {**_BASE_PARAMS, "model": model}
+
+
+async def synthesize_stream(text: str, lang: str = "en") -> AsyncIterator[bytes]:
     """Stream TTS audio chunks in raw mulaw/8000 format.
 
     Yields raw mulaw bytes — caller is responsible for base64-encoding
@@ -66,7 +86,7 @@ async def synthesize_stream(text: str) -> AsyncIterator[bytes]:
         async with client.stream(
             "POST",
             _BASE_URL,
-            params=_PARAMS,
+            params=_params_for_lang(lang),
             headers=_headers(),
             json={"text": text},
         ) as response:
@@ -75,12 +95,12 @@ async def synthesize_stream(text: str) -> AsyncIterator[bytes]:
                 yield chunk
 
 
-async def _synthesize_full(text: str) -> bytes:
+async def _synthesize_full(text: str, lang: str = "en") -> bytes:
     """Generate complete audio for a text (non-streaming, for caching)."""
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.post(
             _BASE_URL,
-            params=_PARAMS,
+            params=_params_for_lang(lang),
             headers=_headers(),
             json={"text": text},
         )
@@ -102,30 +122,36 @@ def get_cached_greeting() -> bytes | None:
 
 
 async def generate_fillers() -> None:
-    """Pre-generate filler phrase audio at startup (sequential)."""
+    """Pre-generate filler phrase audio for all languages at startup."""
     global _filler_audio
-    generated: list[bytes] = []
 
-    for phrase in FILLER_PHRASES:
-        try:
-            audio = await _synthesize_full(phrase)
-            generated.append(audio)
-        except Exception:
-            logger.warning("Failed to generate filler: %s", phrase)
+    for lang, phrases in FILLER_PHRASES.items():
+        generated: list[bytes] = []
+        for phrase in phrases:
+            try:
+                audio = await _synthesize_full(phrase, lang=lang)
+                generated.append(audio)
+            except Exception:
+                logger.warning("Failed to generate %s filler: %s", lang, phrase)
+        _filler_audio[lang] = generated
 
-    _filler_audio = generated
+    total_bytes = sum(len(b) for clips in _filler_audio.values() for b in clips)
+    total_phrases = sum(len(clips) for clips in _filler_audio.values())
     logger.info(
-        "Filler audio generated — %d phrases, %d bytes total",
-        len(_filler_audio),
-        sum(len(b) for b in _filler_audio),
+        "Filler audio generated — %d phrases (%d en, %d es), %d bytes total",
+        total_phrases,
+        len(_filler_audio["en"]),
+        len(_filler_audio["es"]),
+        total_bytes,
     )
 
 
-def get_random_filler() -> bytes | None:
-    """Return a random pre-cached filler audio clip, or None."""
-    if not _filler_audio:
+def get_random_filler(lang: str = "en") -> bytes | None:
+    """Return a random pre-cached filler audio clip for the given language."""
+    clips = _filler_audio.get(lang, _filler_audio.get("en", []))
+    if not clips:
         return None
-    return random.choice(_filler_audio)
+    return random.choice(clips)
 
 
 async def generate_error_clip() -> bytes:

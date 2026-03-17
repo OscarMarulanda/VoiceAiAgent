@@ -27,6 +27,14 @@ client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 # Public API
 # ---------------------------------------------------------------------------
 
+_last_turn_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+
+
+def get_last_turn_usage() -> dict[str, int]:
+    """Return token usage from the most recent process_message call."""
+    return dict(_last_turn_usage)
+
+
 async def process_message(session_id: str, user_message: str) -> str:
     """Process a user message and return the agent's text response.
 
@@ -71,6 +79,8 @@ async def process_message(session_id: str, user_message: str) -> str:
 
     # Call Claude with tool loop
     tool_call_count = 0
+    turn_input_tokens = 0
+    turn_output_tokens = 0
     while True:
         try:
             response = await client.messages.create(
@@ -83,6 +93,10 @@ async def process_message(session_id: str, user_message: str) -> str:
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
             return "I'm sorry, I'm having a little trouble right now. Could you give me a moment and try again?"
+
+        # Track token usage
+        turn_input_tokens += response.usage.input_tokens
+        turn_output_tokens += response.usage.output_tokens
 
         # Check if Claude wants to use tools
         if response.stop_reason == "tool_use":
@@ -137,6 +151,15 @@ async def process_message(session_id: str, user_message: str) -> str:
 
         # Claude returned a text response — we're done
         break
+
+    # Log and store token usage for this turn
+    logger.info(
+        "Token usage — input=%d output=%d total=%d | session=%s",
+        turn_input_tokens, turn_output_tokens,
+        turn_input_tokens + turn_output_tokens, session_id,
+    )
+    _last_turn_usage["input_tokens"] = turn_input_tokens
+    _last_turn_usage["output_tokens"] = turn_output_tokens
 
     # Extract final text from response
     assistant_text = _extract_text(response)
