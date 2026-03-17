@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sunshine Dental | WordPress Theme Test</title>
+
+  <!--
+    Simulates aggressive WordPress theme + plugin CSS that could break
+    an embedded widget without Shadow DOM isolation.
+  -->
+  <style>
+    /* === AGGRESSIVE RESET (common in WordPress themes) === */
+    *, *::before, *::after {
+      box-sizing: content-box !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      font-family: "Comic Sans MS", cursive !important;
+      font-size: 18px !important;
+      line-height: 2.5 !important;
+      color: #2d0a4e !important;
+    }
+
+    /* === GLOBAL OVERRIDES (theme + plugins stacking) === */
+    div {
+      background: #f0e6ff !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    button {
+      background: #ff6600 !important;
+      color: yellow !important;
+      border-radius: 0 !important;
+      cursor: default !important;
+      width: auto !important;
+      height: auto !important;
+      padding: 20px 40px !important;
+      font-size: 24px !important;
+    }
+
+    input {
+      background: #ffffcc !important;
+      color: red !important;
+      border: 3px dashed green !important;
+      border-radius: 0 !important;
+      padding: 20px !important;
+      font-size: 22px !important;
+      width: 100% !important;
+    }
+
+    ul, ol {
+      list-style: square !important;
+      color: #ff00ff !important;
+      padding-left: 50px !important;
+    }
+
+    li {
+      color: #ff00ff !important;
+      margin-bottom: 15px !important;
+    }
+
+    strong, b {
+      color: red !important;
+      font-size: 24px !important;
+    }
+
+    svg {
+      fill: lime !important;
+      width: 80px !important;
+      height: 80px !important;
+    }
+
+    /* === POSITION HIJACKING (slider/popup plugins) === */
+    [style*="position: fixed"] {
+      position: relative !important;
+    }
+
+    /* === Z-INDEX WARS (modal/notification plugins) === */
+    div {
+      z-index: 1 !important;
+    }
+
+    /* === ANIMATION KILL (performance plugins) === */
+    * {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    /* === FLEXBOX OVERRIDE (layout plugins) === */
+    div {
+      display: block !important;
+    }
+
+    /* === WordPress theme body styles === */
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+      padding: 40px !important;
+      min-height: 100vh;
+    }
+
+    /* === "Theme" content styles === */
+    .wp-site {
+      max-width: 900px;
+      margin: 0 auto !important;
+      background: white !important;
+      padding: 40px !important;
+      border-radius: 0 !important;
+    }
+
+    .wp-header {
+      background: #1a0533 !important;
+      padding: 30px !important;
+      margin-bottom: 20px !important;
+    }
+
+    .wp-header h1 {
+      color: white !important;
+      font-family: Impact, sans-serif !important;
+      font-size: 36px !important;
+    }
+
+    .wp-header p {
+      color: #ccbbee !important;
+      font-size: 14px !important;
+    }
+
+    .wp-content h2 {
+      font-family: Impact, sans-serif !important;
+      font-size: 28px !important;
+      color: #4a1a8a !important;
+      margin: 20px 0 10px !important;
+    }
+
+    .wp-content p {
+      margin-bottom: 12px !important;
+    }
+
+    .wp-sidebar {
+      background: #e8d5ff !important;
+      padding: 20px !important;
+      margin-top: 20px !important;
+    }
+
+    .wp-footer {
+      background: #1a0533 !important;
+      padding: 20px !important;
+      margin-top: 30px !important;
+      text-align: center;
+    }
+
+    .wp-footer p {
+      color: #998ab5 !important;
+      font-size: 12px !important;
+    }
+
+    /* === Plugin: "SuperForm Pro" === */
+    .contact-form input {
+      background: #fff0f0 !important;
+      border: 2px solid #cc0000 !important;
+    }
+
+    .contact-form button {
+      background: #cc0000 !important;
+      color: white !important;
+      text-transform: uppercase !important;
+    }
+
+    /* === Plugin: "MegaSlider" === */
+    .slider-banner {
+      background: linear-gradient(to right, #ff8a00, #e52e71) !important;
+      padding: 30px !important;
+      text-align: center;
+    }
+
+    .slider-banner h2 {
+      color: white !important;
+      font-size: 32px !important;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="wp-site">
+    <div class="wp-header">
+      <h1>Sunshine Dental Care</h1>
+      <p>Family & Cosmetic Dentistry Since 1995</p>
+    </div>
+
+    <div class="slider-banner">
+      <h2>New Patient Special: Free Whitening!</h2>
+    </div>
+
+    <div class="wp-content">
+      <h2>Welcome to Our Practice</h2>
+      <p>At Sunshine Dental Care, we believe everyone deserves a healthy, beautiful smile. Our team of experienced dentists and hygienists provide comprehensive dental care for patients of all ages.</p>
+
+      <h2>Our Services</h2>
+      <ul>
+        <li>General Dentistry — Cleanings, Fillings, Exams</li>
+        <li>Cosmetic Dentistry — Whitening, Veneers, Bonding</li>
+        <li>Orthodontics — Braces, Clear Aligners</li>
+        <li>Oral Surgery — Extractions, Implants</li>
+        <li>Pediatric Dentistry — Kids' Exams, Sealants</li>
+        <li>Emergency Dental Care — Same-Day Appointments</li>
+      </ul>
+
+      <h2>Meet Our Providers</h2>
+      <p><strong>Dr. Sarah Chen, DDS</strong> — General Dentistry, 15 years experience. Specializes in cosmetic procedures and anxious patients.</p>
+      <p><strong>Dr. Michael Rodriguez, DMD</strong> — Orthodontics &amp; Oral Surgery. Board certified with expertise in implant placement.</p>
+
+      <h2>Office Hours</h2>
+      <p>Monday - Friday: 8:00 AM - 5:00 PM</p>
+      <p>Saturday: 9:00 AM - 2:00 PM</p>
+      <p>Sunday: Closed</p>
+
+      <h2>Insurance</h2>
+      <p>We accept most major dental insurance plans including Delta Dental, Cigna, MetLife, Aetna, and many more. Contact us to verify your coverage.</p>
+
+      <div class="wp-sidebar">
+        <h2>Contact Us</h2>
+        <p>Phone: (555) 123-4567</p>
+        <p>Email: info@sunshinedental.example</p>
+        <p>Address: 123 Main Street, Suite 100, Anytown, CA 90210</p>
+
+        <div class="contact-form">
+          <h2>Request an Appointment</h2>
+          <input type="text" placeholder="Your Name" />
+          <input type="email" placeholder="Email Address" />
+          <input type="tel" placeholder="Phone Number" />
+          <button>Submit Request</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="wp-footer">
+      <p>&copy; 2024 Sunshine Dental Care. All Rights Reserved. Powered by WordPress.</p>
+    </div>
+  </div>
+
+  <!-- Chat Widget — single script tag embed -->
+  <script
+    src="/widget/widget.js"
+    data-server="http://localhost:8000"
+    data-practice="Sunshine Dental"
+    data-primary-color="#2563eb"
+    data-position="bottom-right"
+    data-greeting="Hello! I'm Sunny, the Sunshine Dental assistant. How can I help you today?"
+  ></script>
+</body>
+</html>

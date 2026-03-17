@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sunshine Dental — Admin Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'sans-serif'] },
+      colors: {
+        sidebar:        { DEFAULT: '#0f172a', foreground: '#c8cad4', muted: '#7a7e8a', border: '#1e293b', accent: '#1e293b', 'accent-fg': '#f1f5f9' },
+        dash:           { bg: '#f8f9fc', card: '#ffffff', border: '#e2e4ec', muted: '#f0f1f6', 'muted-fg': '#64748b' },
+        primary:        { DEFAULT: '#6366f1', light: '#eef2ff', foreground: '#ffffff' },
+        success:        { DEFAULT: '#22c55e', light: '#dcfce7', foreground: '#15803d' },
+        warning:        { DEFAULT: '#f59e0b', light: '#fef3c7', foreground: '#92400e' },
+        destructive:    { DEFAULT: '#ef4444', light: '#fef2f2', foreground: '#991b1b' },
+        chart1: '#6366f1',
+        chart2: '#22c55e',
+        chart3: '#f59e0b',
+        chart4: '#ef4444',
+        chart5: '#a855f7',
+      },
+    },
+  },
+}
+</script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .icon-filled { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+  /* Page transitions */
+  .page { display: none !important; opacity: 0; transition: opacity 200ms ease; }
+  .page.active { display: flex !important; opacity: 1; }
+
+  /* Sidebar collapse */
+  #sidebar {
+    transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1), padding 250ms ease;
+    overflow: hidden;
+  }
+  #sidebar.collapsed { width: 0; padding: 0; }
+  #sidebar.collapsed > * { opacity: 0; pointer-events: none; }
+
+  /* Session detail panel — hidden by default, shown when .open */
+  #session-detail {
+    width: 0;
+    min-width: 0;
+    border-left: none;
+    opacity: 0;
+    overflow: hidden;
+    transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease, border 0ms;
+  }
+  #session-detail.open {
+    width: 480px;
+    min-width: 480px;
+    border-left: 1px solid #e2e4ec;
+    opacity: 1;
+  }
+
+  /* Scrollbar styling */
+  .custom-scroll::-webkit-scrollbar { width: 6px; }
+  .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+  .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+  /* Pulse for active sessions */
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+  /* Skeleton loading shimmer */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #f0f1f6 25%, #e2e4ec 50%, #f0f1f6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+  }
+</style>
+</head>
+
+<body class="bg-dash-bg text-slate-900 h-screen overflow-hidden">
+<div class="flex h-full">
+
+<!-- ================================================================== -->
+<!-- SIDEBAR                                                            -->
+<!-- ================================================================== -->
+<aside id="sidebar" class="w-64 bg-sidebar flex flex-col shrink-0">
+  <!-- Logo + collapse button -->
+  <div class="h-16 flex items-center justify-between px-6 border-b border-sidebar-border">
+    <div class="flex items-center gap-3">
+      <div class="h-8 w-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-white text-lg">clinical_notes</span>
+      </div>
+      <span class="text-lg font-semibold text-white tracking-tight whitespace-nowrap">SunnyAI</span>
+    </div>
+    <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-sidebar-accent transition-colors" title="Collapse sidebar">
+      <span class="material-symbols-outlined text-sidebar-muted text-xl">chevron_left</span>
+    </button>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 p-4">
+    <ul class="space-y-1">
+      <li>
+        <button onclick="switchPage('sessions')" id="nav-sessions"
+          class="nav-btn flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors bg-sidebar-accent text-sidebar-accent-fg">
+          <span class="material-symbols-outlined text-xl">chat_bubble</span>
+          Sessions
+        </button>
+      </li>
+      <li>
+        <button onclick="switchPage('appointments')" id="nav-appointments"
+          class="nav-btn flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
+          <span class="material-symbols-outlined text-xl">calendar_today</span>
+          Appointments
+        </button>
+      </li>
+      <li>
+        <button onclick="switchPage('analytics')" id="nav-analytics"
+          class="nav-btn flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
+          <span class="material-symbols-outlined text-xl">bar_chart</span>
+          Analytics
+        </button>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Footer -->
+  <div class="p-4 border-t border-sidebar-border">
+    <div class="text-xs text-sidebar-muted">Powered by Claude AI</div>
+  </div>
+</aside>
+
+<!-- ================================================================== -->
+<!-- MAIN CONTENT                                                       -->
+<!-- ================================================================== -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+  <!-- Header -->
+  <header class="h-16 flex items-center justify-between px-6 border-b border-dash-border bg-dash-card shrink-0">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" id="sidebar-open-btn" class="hidden p-1.5 rounded-lg hover:bg-dash-muted transition-colors text-dash-muted-fg" title="Open sidebar">
+        <span class="material-symbols-outlined text-xl">menu</span>
+      </button>
+      <h1 class="text-lg font-semibold text-slate-900">Sunshine Dental</h1>
+    </div>
+    <div class="flex items-center gap-1.5 px-2.5 py-1 bg-warning-light border border-amber-200 rounded text-xs font-bold text-warning-foreground uppercase tracking-wider">
+      <span class="material-symbols-outlined text-warning" style="font-size:14px;">warning</span>
+      Demo — Not HIPAA Compliant
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="flex-1 overflow-hidden">
+
+    <!-- ============================================================ -->
+    <!-- SESSIONS PAGE                                                -->
+    <!-- ============================================================ -->
+    <div id="page-sessions" class="page active h-full flex gap-0">
+
+      <!-- Sessions list -->
+      <div id="sessions-list-container" class="flex-1 flex flex-col overflow-hidden transition-all duration-300">
+        <div class="p-6 pb-4">
+          <h2 class="text-lg font-semibold">Recent Sessions</h2>
+        </div>
+        <div id="sessions-list" class="flex-1 overflow-y-auto custom-scroll">
+          <!-- Loading skeletons -->
+          <div id="sessions-loading" class="divide-y divide-dash-border">
+            <div class="px-6 py-4 flex items-center gap-4">
+              <div class="skeleton h-10 w-10 rounded-lg"></div>
+              <div class="flex-1 space-y-2"><div class="skeleton h-4 w-32"></div><div class="skeleton h-3 w-48"></div></div>
+            </div>
+            <div class="px-6 py-4 flex items-center gap-4">
+              <div class="skeleton h-10 w-10 rounded-lg"></div>
+              <div class="flex-1 space-y-2"><div class="skeleton h-4 w-40"></div><div class="skeleton h-3 w-36"></div></div>
+            </div>
+            <div class="px-6 py-4 flex items-center gap-4">
+              <div class="skeleton h-10 w-10 rounded-lg"></div>
+              <div class="flex-1 space-y-2"><div class="skeleton h-4 w-28"></div><div class="skeleton h-3 w-44"></div></div>
+            </div>
+          </div>
+          <!-- Populated rows go here -->
+          <div id="sessions-rows" class="divide-y divide-dash-border hidden"></div>
+        </div>
+        <!-- Pagination -->
+        <div id="sessions-pagination" class="hidden px-6 py-3 border-t border-dash-border flex items-center justify-between text-sm text-dash-muted-fg">
+          <span id="sessions-count"></span>
+          <div class="flex gap-2">
+            <button onclick="loadSessions('prev')" id="btn-prev" class="px-3 py-1 rounded border border-dash-border hover:bg-dash-muted transition-colors disabled:opacity-40" disabled>Previous</button>
+            <button onclick="loadSessions('next')" id="btn-next" class="px-3 py-1 rounded border border-dash-border hover:bg-dash-muted transition-colors disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session detail panel -->
+      <div id="session-detail" class="shrink-0 bg-dash-card flex flex-col">
+        <div id="detail-content" class="flex flex-col h-full"></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- APPOINTMENTS PAGE                                            -->
+    <!-- ============================================================ -->
+    <div id="page-appointments" class="page h-full flex-col">
+
+      <!-- Controls bar -->
+      <div class="px-6 py-4 border-b border-dash-border flex items-center justify-between shrink-0 bg-dash-card">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-1">
+            <button onclick="calNavigate('prev')" class="p-1.5 rounded-lg border border-dash-border hover:bg-dash-muted transition-colors">
+              <span class="material-symbols-outlined text-lg">chevron_left</span>
+            </button>
+            <button onclick="calNavigate('next')" class="p-1.5 rounded-lg border border-dash-border hover:bg-dash-muted transition-colors">
+              <span class="material-symbols-outlined text-lg">chevron_right</span>
+            </button>
+            <button onclick="calGoToday()" class="px-3 py-1.5 rounded-lg border border-dash-border hover:bg-dash-muted transition-colors text-sm font-medium ml-1">Today</button>
+          </div>
+          <h2 id="cal-date-label" class="text-lg font-semibold"></h2>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="calToggleCancelled()" id="cal-btn-cancelled" class="px-3 py-1.5 text-sm rounded-lg border border-dash-border hover:bg-dash-muted transition-colors text-dash-muted-fg">Show Cancelled</button>
+          <div class="flex items-center bg-dash-muted p-1 rounded-lg">
+            <button onclick="calSetView('day')" id="cal-btn-day" class="px-4 py-1.5 text-sm font-semibold rounded-md bg-dash-card shadow-sm text-primary transition-colors">Day</button>
+            <button onclick="calSetView('week')" id="cal-btn-week" class="px-4 py-1.5 text-sm font-semibold rounded-md text-dash-muted-fg transition-colors">Week</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Provider filter bar -->
+      <div id="cal-provider-filters" class="px-6 py-3 border-b border-dash-border flex items-center gap-6 shrink-0 bg-dash-card">
+        <span class="text-sm font-medium text-dash-muted-fg">Providers:</span>
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="flex-1 overflow-auto custom-scroll bg-dash-card relative">
+        <div id="cal-container"></div>
+      </div>
+
+      <!-- Appointment detail popup -->
+      <div id="apt-popup" class="hidden fixed z-50 bg-dash-card rounded-xl shadow-2xl border border-dash-border p-4 w-72">
+        <div id="apt-popup-content"></div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ANALYTICS PAGE                                               -->
+    <!-- ============================================================ -->
+    <div id="page-analytics" class="page h-full flex-col overflow-auto custom-scroll">
+      <div class="p-6 space-y-6 max-w-7xl mx-auto w-full">
+
+        <!-- Metric Cards -->
+        <div class="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Total Sessions</span>
+              <div class="h-8 w-8 rounded-lg bg-dash-muted flex items-center justify-center">
+                <span class="material-symbols-outlined text-dash-muted-fg text-base">chat_bubble</span>
+              </div>
+            </div>
+            <p id="stat-total-sessions" class="mt-2 text-2xl font-bold">—</p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Voice Calls</span>
+              <div class="h-8 w-8 rounded-lg bg-dash-muted flex items-center justify-center">
+                <span class="material-symbols-outlined text-dash-muted-fg text-base">call</span>
+              </div>
+            </div>
+            <p id="stat-voice" class="mt-2 text-2xl font-bold">—</p>
+            <p id="stat-voice-pct" class="mt-1 text-xs text-dash-muted-fg"></p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Chat Sessions</span>
+              <div class="h-8 w-8 rounded-lg bg-dash-muted flex items-center justify-center">
+                <span class="material-symbols-outlined text-dash-muted-fg text-base">forum</span>
+              </div>
+            </div>
+            <p id="stat-chat" class="mt-2 text-2xl font-bold">—</p>
+            <p id="stat-chat-pct" class="mt-1 text-xs text-dash-muted-fg"></p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Booked Today</span>
+              <div class="h-8 w-8 rounded-lg bg-success-light flex items-center justify-center">
+                <span class="material-symbols-outlined text-success text-base">event_available</span>
+              </div>
+            </div>
+            <p id="stat-booked" class="mt-2 text-2xl font-bold">—</p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Cancelled Today</span>
+              <div class="h-8 w-8 rounded-lg bg-destructive-light flex items-center justify-center">
+                <span class="material-symbols-outlined text-destructive text-base">event_busy</span>
+              </div>
+            </div>
+            <p id="stat-cancelled" class="mt-2 text-2xl font-bold">—</p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-dash-muted-fg">Avg Duration</span>
+              <div class="h-8 w-8 rounded-lg bg-dash-muted flex items-center justify-center">
+                <span class="material-symbols-outlined text-dash-muted-fg text-base">schedule</span>
+              </div>
+            </div>
+            <p id="stat-duration" class="mt-2 text-2xl font-bold">—</p>
+          </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="grid gap-6 lg:grid-cols-2">
+          <!-- Language Breakdown -->
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <h3 class="text-base font-semibold mb-4">Language Breakdown</h3>
+            <div id="chart-language" class="flex items-center justify-center"></div>
+          </div>
+          <!-- Top Procedures -->
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <h3 class="text-base font-semibold mb-4">Top Procedures</h3>
+            <div id="chart-procedures"></div>
+          </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="grid gap-6 lg:grid-cols-2">
+          <!-- Busiest Days -->
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <h3 class="text-base font-semibold mb-4">Busiest Days of Week</h3>
+            <div id="chart-busiest-days"></div>
+          </div>
+          <!-- Response Latency -->
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <h3 class="text-base font-semibold mb-4">Response Latency</h3>
+            <div id="chart-latency" class="flex items-center justify-center"></div>
+          </div>
+        </div>
+
+        <!-- All-time stats -->
+        <div class="grid gap-4 grid-cols-2">
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <span class="text-xs font-medium text-dash-muted-fg uppercase tracking-wider">All-Time Sessions</span>
+            <p id="stat-all-sessions" class="mt-2 text-3xl font-bold">—</p>
+          </div>
+          <div class="bg-dash-card rounded-xl border border-dash-border p-6">
+            <span class="text-xs font-medium text-dash-muted-fg uppercase tracking-wider">All-Time Appointments Booked</span>
+            <p id="stat-all-booked" class="mt-2 text-3xl font-bold">—</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<!-- ================================================================== -->
+<!-- JAVASCRIPT                                                         -->
+<!-- ================================================================== -->
+<!-- Chat Widget -->
+<script src="/widget/widget.js"
+  data-server=""
+  data-practice="Sunshine Dental"
+  data-primary-color="#6366f1"
+  data-bottom="60"
+  data-greeting="Hi! I'm Sunny, the AI assistant. How can I help you today?">
+</script>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let currentPage = 'sessions';
+let sessionsData = [];
+let sessionsTotal = 0;
+let sessionsOffset = 0;
+const PAGE_SIZE = 20;
+let selectedSessionId = null;
+
+// ---------------------------------------------------------------------------
+// Sidebar toggle
+// ---------------------------------------------------------------------------
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const openBtn = document.getElementById('sidebar-open-btn');
+  sidebar.classList.toggle('collapsed');
+  const isCollapsed = sidebar.classList.contains('collapsed');
+  openBtn.classList.toggle('hidden', !isCollapsed);
+}
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+function switchPage(page) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+  });
+  // Show selected page
+  const el = document.getElementById('page-' + page);
+  if (el) {
+    el.classList.add('active');
+    // Trigger reflow for transition
+    void el.offsetWidth;
+  }
+
+  // Update nav buttons
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.className = 'nav-btn flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-foreground';
+  });
+  const activeBtn = document.getElementById('nav-' + page);
+  if (activeBtn) {
+    activeBtn.className = 'nav-btn flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors bg-sidebar-accent text-sidebar-accent-fg';
+  }
+
+  currentPage = page;
+
+  // Lazy-init tabs on first visit
+  if (page === 'appointments' && !calInitialized) {
+    calInitialized = true;
+    calInit();
+  }
+  if (page === 'analytics' && !analyticsInitialized) {
+    analyticsInitialized = true;
+    analyticsInit();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sessions — List
+// ---------------------------------------------------------------------------
+async function loadSessions(direction) {
+  if (direction === 'next') sessionsOffset += PAGE_SIZE;
+  else if (direction === 'prev') sessionsOffset = Math.max(0, sessionsOffset - PAGE_SIZE);
+
+  try {
+    const res = await fetch(`/admin/api/sessions?limit=${PAGE_SIZE}&offset=${sessionsOffset}`);
+    const data = await res.json();
+    sessionsData = data.sessions;
+    sessionsTotal = data.total;
+    renderSessions();
+  } catch (err) {
+    console.error('Failed to load sessions:', err);
+  }
+}
+
+function renderSessions() {
+  const loading = document.getElementById('sessions-loading');
+  const container = document.getElementById('sessions-rows');
+  const pagination = document.getElementById('sessions-pagination');
+
+  loading.classList.add('hidden');
+  container.classList.remove('hidden');
+  pagination.classList.remove('hidden');
+
+  container.innerHTML = sessionsData.map(s => sessionRowHTML(s)).join('');
+
+  // Pagination state
+  document.getElementById('sessions-count').textContent =
+    `${sessionsOffset + 1}–${Math.min(sessionsOffset + sessionsData.length, sessionsTotal)} of ${sessionsTotal}`;
+  document.getElementById('btn-prev').disabled = sessionsOffset === 0;
+  document.getElementById('btn-next').disabled = sessionsOffset + PAGE_SIZE >= sessionsTotal;
+
+  // Highlight selected
+  if (selectedSessionId) {
+    const row = document.querySelector(`[data-session-id="${selectedSessionId}"]`);
+    if (row) row.classList.add('bg-dash-muted');
+  }
+}
+
+function sessionRowHTML(s) {
+  const isActive = s.status === 'active';
+  const channelIcon = s.channel === 'voice' ? 'call' : 'chat';
+  const channelLabel = s.channel === 'voice' ? 'Voice Call' : s.channel === 'chat' ? 'Chat Session' : 'Test Session';
+  const startTime = formatTime(s.started_at);
+  const duration = computeDuration(s.started_at, s.ended_at);
+  const lang = (s.language || 'en').toUpperCase();
+  const outcome = s.metrics?.outcome || (isActive ? 'active' : 'completed');
+  const outcomeBadge = outcomeBadgeHTML(outcome);
+  const selected = selectedSessionId === s.id ? 'bg-dash-muted' : '';
+
+  return `
+    <button onclick="selectSession('${s.id}')" data-session-id="${s.id}"
+      class="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-dash-muted/50 ${selected}">
+      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-muted shrink-0">
+        <span class="material-symbols-outlined text-dash-muted-fg">${channelIcon}</span>
+      </div>
+      <div class="flex flex-1 items-center gap-4 min-w-0">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full shrink-0 ${isActive ? 'bg-success pulse-dot' : 'bg-slate-300'}"></span>
+            <span class="text-sm font-medium truncate">${channelLabel}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-3 text-xs text-dash-muted-fg">
+            <span>${startTime}</span>
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined" style="font-size:12px;">schedule</span>
+              ${duration}
+            </span>
+            ${s.caller_number ? `<span class="truncate">${s.caller_number}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <span class="text-xs font-medium bg-dash-muted px-2 py-0.5 rounded">${lang}</span>
+          <span class="text-xs text-dash-muted-fg">${s.message_count} msgs</span>
+          ${outcomeBadge}
+          <span class="material-symbols-outlined text-slate-300 text-lg">chevron_right</span>
+        </div>
+      </div>
+    </button>`;
+}
+
+function outcomeBadgeHTML(outcome) {
+  const styles = {
+    completed:  'bg-success-light text-success-foreground border-success/20',
+    abandoned:  'bg-warning-light text-warning-foreground border-warning/20',
+    active:     'bg-primary-light text-primary border-primary/20',
+    error:      'bg-destructive-light text-destructive-foreground border-destructive/20',
+  };
+  const cls = styles[outcome] || styles.completed;
+  return `<span class="text-[10px] font-bold px-2 py-0.5 rounded border capitalize ${cls}">${outcome}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Sessions — Detail Panel
+// ---------------------------------------------------------------------------
+async function selectSession(id) {
+  selectedSessionId = id;
+
+  // Highlight row
+  document.querySelectorAll('[data-session-id]').forEach(el => el.classList.remove('bg-dash-muted'));
+  const row = document.querySelector(`[data-session-id="${id}"]`);
+  if (row) row.classList.add('bg-dash-muted');
+
+  // Show panel with loading
+  const panel = document.getElementById('session-detail');
+  const content = document.getElementById('detail-content');
+  content.innerHTML = detailLoadingHTML();
+  panel.classList.add('open');
+
+  try {
+    const res = await fetch(`/admin/api/sessions/${id}`);
+    const session = await res.json();
+    if (session.error) {
+      content.innerHTML = `<div class="p-6 text-center text-dash-muted-fg">Session not found</div>`;
+      return;
+    }
+    content.innerHTML = detailHTML(session);
+  } catch (err) {
+    content.innerHTML = `<div class="p-6 text-center text-destructive">Failed to load session</div>`;
+  }
+}
+
+function closeDetail() {
+  selectedSessionId = null;
+  document.getElementById('session-detail').classList.remove('open');
+  document.querySelectorAll('[data-session-id]').forEach(el => el.classList.remove('bg-dash-muted'));
+}
+
+function detailLoadingHTML() {
+  return `
+    <div class="p-4 border-b border-dash-border flex items-center gap-3">
+      <div class="skeleton h-10 w-10 rounded-lg"></div>
+      <div class="space-y-2"><div class="skeleton h-4 w-24"></div><div class="skeleton h-3 w-40"></div></div>
+    </div>
+    <div class="p-4 space-y-3">
+      <div class="skeleton h-12 w-3/4 rounded-2xl"></div>
+      <div class="skeleton h-10 w-2/3 rounded-2xl ml-auto"></div>
+      <div class="skeleton h-14 w-4/5 rounded-2xl"></div>
+    </div>`;
+}
+
+function detailHTML(s) {
+  const channelIcon = s.channel === 'voice' ? 'call' : 'chat';
+  const channelLabel = s.channel === 'voice' ? 'Voice Call' : s.channel === 'chat' ? 'Chat Session' : 'Test Session';
+  const startTime = formatTime(s.started_at);
+  const duration = computeDuration(s.started_at, s.ended_at);
+  const metrics = s.metrics || {};
+
+  // Build transcript HTML
+  const transcriptHTML = (s.messages || []).map(m => {
+    const isUser = m.role === 'user';
+    const time = formatTime(m.timestamp);
+    const align = isUser ? 'items-end' : 'items-start';
+    const bubbleCls = isUser
+      ? 'bg-primary text-white rounded-br-md'
+      : 'bg-dash-muted text-slate-900 rounded-bl-md';
+    return `
+      <div class="flex flex-col ${align}">
+        <div class="max-w-[85%] rounded-2xl px-4 py-2.5 ${bubbleCls}">
+          <p class="text-sm">${escapeHTML(m.content)}</p>
+        </div>
+        <span class="mt-1 text-[10px] text-dash-muted-fg ${isUser ? 'mr-1' : 'ml-1'}">${time}</span>
+      </div>`;
+  }).join('');
+
+  // Tools badges
+  const toolsHTML = (metrics.tools_used || []).length > 0
+    ? metrics.tools_used.map(t => `<span class="px-2 py-0.5 bg-dash-muted text-dash-muted-fg text-[10px] rounded font-mono border border-dash-border">${t}</span>`).join('')
+    : '<span class="text-xs text-dash-muted-fg">None</span>';
+
+  // Appointment booked indicator
+  const bookedHTML = metrics.appointment_booked
+    ? `<div class="flex items-center gap-2"><div class="h-6 w-6 rounded-full bg-success flex items-center justify-center"><span class="material-symbols-outlined text-white" style="font-size:16px;">check</span></div><span class="text-sm font-medium text-success-foreground">Appointment Booked</span></div>`
+    : `<div class="flex items-center gap-2"><div class="h-6 w-6 rounded-full bg-dash-muted flex items-center justify-center"><span class="material-symbols-outlined text-dash-muted-fg" style="font-size:16px;">close</span></div><span class="text-sm text-dash-muted-fg">No appointment booked</span></div>`;
+
+  const avgResponse = metrics.avg_agent_ms != null ? `${Math.round(metrics.avg_agent_ms)}ms` : '—';
+
+  return `
+    <!-- Header -->
+    <div class="flex items-start justify-between p-4 border-b border-dash-border shrink-0">
+      <div class="flex items-start gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-muted shrink-0">
+          <span class="material-symbols-outlined text-dash-muted-fg">${channelIcon}</span>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900">${channelLabel}</h3>
+          <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-dash-muted-fg">
+            <span>${startTime}</span>
+            <span>·</span>
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined" style="font-size:12px;">schedule</span>
+              ${duration}
+            </span>
+            ${s.caller_number ? `<span>·</span><span>${s.caller_number}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <button onclick="closeDetail()" class="p-1 rounded hover:bg-dash-muted transition-colors">
+        <span class="material-symbols-outlined text-dash-muted-fg">close</span>
+      </button>
+    </div>
+
+    <!-- Transcript -->
+    <div class="flex-1 overflow-hidden flex flex-col mx-4 mt-4 rounded-lg border border-dash-border bg-dash-muted/30">
+      <div class="border-b border-dash-border px-4 py-2 shrink-0">
+        <h4 class="text-sm font-medium">Transcript</h4>
+      </div>
+      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4">
+        ${transcriptHTML || '<p class="text-sm text-dash-muted-fg text-center py-8">No messages in this session</p>'}
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="mx-4 my-4 rounded-lg border border-dash-border bg-dash-muted/30 p-4 shrink-0">
+      <h4 class="mb-3 text-sm font-medium">Metrics</h4>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <span class="text-xs text-dash-muted-fg">Total Turns</span>
+          <p class="text-lg font-semibold">${metrics.total_turns ?? '—'}</p>
+        </div>
+        <div>
+          <span class="text-xs text-dash-muted-fg">Avg Response</span>
+          <p class="text-lg font-semibold">${avgResponse}</p>
+        </div>
+        <div class="col-span-2">
+          <span class="text-xs text-dash-muted-fg">Tools Used</span>
+          <div class="mt-1 flex flex-wrap gap-1">${toolsHTML}</div>
+        </div>
+        <div class="col-span-2 flex items-center justify-between rounded-lg bg-dash-card p-3 border border-dash-border">
+          ${bookedHTML}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function formatTime(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function computeDuration(startISO, endISO) {
+  if (!startISO) return '—';
+  const start = new Date(startISO);
+  const end = endISO ? new Date(endISO) : new Date();
+  const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  if (mins < 60) return `${mins}:${String(secs).padStart(2, '0')}`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m`;
+}
+
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — State
+// ---------------------------------------------------------------------------
+const PRACTICE_TZ = 'America/Los_Angeles';
+const CAL_HOUR_PX = 48;  // pixels per hour row
+const CAL_START_HOUR = 8;
+const CAL_END_HOUR = 18;  // 6 PM (exclusive — last label is 5 PM)
+const CAL_SLOT_COUNT = CAL_END_HOUR - CAL_START_HOUR;
+
+const PROVIDER_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#a855f7', '#ef4444'];
+
+let calView = 'day';
+let calDate = new Date();  // current viewing date (local)
+let calProviders = [];
+let calSelectedProviders = new Set();
+let calAppointments = [];
+let calAppointmentsLookup = {};  // id -> appointment object, for popup
+let calShowCancelled = false;
+
+// ---------------------------------------------------------------------------
+// Calendar — Init & Data Loading
+// ---------------------------------------------------------------------------
+async function calInit() {
+  // Load providers
+  try {
+    const res = await fetch('/admin/api/providers');
+    const data = await res.json();
+    calProviders = data.providers.map((p, i) => ({
+      ...p,
+      color: PROVIDER_COLORS[i % PROVIDER_COLORS.length],
+    }));
+    calSelectedProviders = new Set(calProviders.map(p => p.id));
+    calRenderProviderFilters();
+  } catch (err) {
+    console.error('Failed to load providers:', err);
+  }
+  await calLoadAppointments();
+}
+
+async function calLoadAppointments() {
+  const { dateFrom, dateTo } = calGetDateRange();
+  const statusParam = calShowCancelled ? '' : '&status=confirmed';
+  try {
+    const res = await fetch(`/admin/api/appointments?date_from=${dateFrom}&date_to=${dateTo}${statusParam}`);
+    const data = await res.json();
+    calAppointments = data.appointments;
+    calAppointmentsLookup = {};
+    for (const a of calAppointments) calAppointmentsLookup[a.id] = a;
+    calRender();
+  } catch (err) {
+    console.error('Failed to load appointments:', err);
+  }
+}
+
+function calToggleCancelled() {
+  calShowCancelled = !calShowCancelled;
+  const btn = document.getElementById('cal-btn-cancelled');
+  if (btn) btn.textContent = calShowCancelled ? 'Hide Cancelled' : 'Show Cancelled';
+  calLoadAppointments();
+}
+
+function calGetDateRange() {
+  if (calView === 'day') {
+    const ds = calFormatDateISO(calDate);
+    return { dateFrom: ds, dateTo: ds };
+  }
+  // Week view — Monday to Friday
+  const mon = calGetMonday(calDate);
+  const fri = new Date(mon);
+  fri.setDate(fri.getDate() + 4);
+  return { dateFrom: calFormatDateISO(mon), dateTo: calFormatDateISO(fri) };
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Navigation
+// ---------------------------------------------------------------------------
+function calNavigate(dir) {
+  const days = calView === 'day' ? 1 : 7;
+  calDate.setDate(calDate.getDate() + (dir === 'next' ? days : -days));
+  calLoadAppointments();
+}
+
+function calGoToday() {
+  calDate = new Date();
+  calLoadAppointments();
+}
+
+function calSetView(view) {
+  calView = view;
+  document.getElementById('cal-btn-day').className = view === 'day'
+    ? 'px-4 py-1.5 text-sm font-semibold rounded-md bg-dash-card shadow-sm text-primary transition-colors'
+    : 'px-4 py-1.5 text-sm font-semibold rounded-md text-dash-muted-fg transition-colors';
+  document.getElementById('cal-btn-week').className = view === 'week'
+    ? 'px-4 py-1.5 text-sm font-semibold rounded-md bg-dash-card shadow-sm text-primary transition-colors'
+    : 'px-4 py-1.5 text-sm font-semibold rounded-md text-dash-muted-fg transition-colors';
+  calLoadAppointments();
+}
+
+function calToggleProvider(id) {
+  if (calSelectedProviders.has(id)) calSelectedProviders.delete(id);
+  else calSelectedProviders.add(id);
+  calRenderProviderFilters();
+  calRender();
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Provider Filters
+// ---------------------------------------------------------------------------
+function calRenderProviderFilters() {
+  const container = document.getElementById('cal-provider-filters');
+  container.innerHTML = '<span class="text-sm font-medium text-dash-muted-fg">Providers:</span>' +
+    calProviders.map(p => {
+      const checked = calSelectedProviders.has(p.id);
+      return `
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="calToggleProvider('${p.id}')"
+            class="rounded border-slate-300 h-4 w-4 accent-[${p.color}]" style="accent-color:${p.color}"/>
+          <span class="h-3 w-3 rounded-full shrink-0" style="background:${p.color}"></span>
+          <span class="text-sm">${p.name}</span>
+        </label>`;
+    }).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Render
+// ---------------------------------------------------------------------------
+function calRender() {
+  calUpdateDateLabel();
+  if (calView === 'day') calRenderDay();
+  else calRenderWeek();
+}
+
+function calUpdateDateLabel() {
+  const label = document.getElementById('cal-date-label');
+  if (calView === 'day') {
+    label.textContent = calDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  } else {
+    const mon = calGetMonday(calDate);
+    const fri = new Date(mon); fri.setDate(fri.getDate() + 4);
+    label.textContent = `${mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }
+}
+
+function calRenderDay() {
+  const visibleProviders = calProviders.filter(p => calSelectedProviders.has(p.id));
+  const filtered = calAppointments.filter(a => calSelectedProviders.has(a.provider_id));
+
+  const timeColHTML = calTimeColumnHTML();
+  const providerCols = visibleProviders.map(p => {
+    const provApts = filtered.filter(a => a.provider_id === p.id);
+    return calProviderColumnHTML(p, provApts);
+  }).join('');
+
+  document.getElementById('cal-container').innerHTML = `
+    <div class="flex min-w-fit">
+      ${timeColHTML}
+      <div class="flex flex-1">${providerCols}</div>
+    </div>`;
+
+  calPositionNowLine();
+}
+
+function calRenderWeek() {
+  const filtered = calAppointments.filter(a => calSelectedProviders.has(a.provider_id));
+  const mon = calGetMonday(calDate);
+  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+  const timeColHTML = calTimeColumnHTML();
+  const dayCols = dayNames.map((dayName, i) => {
+    const dayDate = new Date(mon);
+    dayDate.setDate(dayDate.getDate() + i);
+    const dayStr = calFormatDateISO(dayDate);
+    const dayApts = filtered.filter(a => {
+      const aptLocal = calUTCtoLocal(a.starts_at);
+      return calFormatDateISO(aptLocal) === dayStr;
+    });
+    return calDayColumnHTML(dayName, dayDate, dayApts);
+  }).join('');
+
+  document.getElementById('cal-container').innerHTML = `
+    <div class="flex min-w-fit">
+      ${timeColHTML}
+      <div class="flex flex-1">${dayCols}</div>
+    </div>`;
+
+  calPositionNowLine();
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Column Builders
+// ---------------------------------------------------------------------------
+function calTimeColumnHTML() {
+  const labels = [];
+  for (let h = CAL_START_HOUR; h < CAL_END_HOUR; h++) {
+    const hr = h > 12 ? h - 12 : h;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    labels.push(`
+      <div style="height:${CAL_HOUR_PX}px" class="flex items-start justify-end pr-3 border-b border-dash-border text-xs text-dash-muted-fg">
+        <span class="-translate-y-2">${hr}:00 ${ampm}</span>
+      </div>`);
+  }
+  return `
+    <div class="w-20 shrink-0 border-r border-dash-border">
+      <div class="h-12 border-b border-dash-border"></div>
+      ${labels.join('')}
+    </div>`;
+}
+
+function calProviderColumnHTML(provider, appointments) {
+  const gridRows = Array.from({ length: CAL_SLOT_COUNT }, () =>
+    `<div style="height:${CAL_HOUR_PX}px" class="border-b border-dash-border"></div>`
+  ).join('');
+
+  const blocks = appointments.map(a => calAppointmentBlockHTML(a, provider.color)).join('');
+
+  return `
+    <div class="flex-1 min-w-[180px] border-r border-dash-border last:border-r-0">
+      <div class="h-12 flex items-center justify-center border-b border-dash-border bg-dash-muted/30 gap-2">
+        <span class="h-3 w-3 rounded-full shrink-0" style="background:${provider.color}"></span>
+        <span class="text-sm font-medium truncate">${provider.name}</span>
+      </div>
+      <div class="relative">
+        ${gridRows}
+        ${blocks}
+      </div>
+    </div>`;
+}
+
+function calDayColumnHTML(dayName, dayDate, appointments) {
+  const gridRows = Array.from({ length: CAL_SLOT_COUNT }, () =>
+    `<div style="height:${CAL_HOUR_PX}px" class="border-b border-dash-border"></div>`
+  ).join('');
+
+  const isToday = calFormatDateISO(dayDate) === calFormatDateISO(new Date());
+  const dateNum = dayDate.getDate();
+
+  // Compute overlap layout for this day's appointments
+  const layout = calComputeOverlapLayout(appointments);
+  const blocks = appointments.map(a => {
+    const prov = calProviders.find(p => p.id === a.provider_id);
+    const color = prov ? prov.color : '#6366f1';
+    const pos = layout.get(a.id) || { col: 0, totalCols: 1 };
+    return calAppointmentBlockHTML(a, color, pos.col, pos.totalCols);
+  }).join('');
+
+  return `
+    <div class="flex-1 min-w-[150px] border-r border-dash-border last:border-r-0">
+      <div class="h-12 flex items-center justify-center border-b border-dash-border bg-dash-muted/30 gap-2">
+        <span class="text-sm font-medium">${dayName.slice(0, 3)}</span>
+        <span class="text-sm ${isToday ? 'bg-primary text-white rounded-full w-7 h-7 flex items-center justify-center font-bold' : 'text-dash-muted-fg'}">${dateNum}</span>
+      </div>
+      <div class="relative">
+        ${gridRows}
+        ${blocks}
+      </div>
+    </div>`;
+}
+
+// Compute overlap columns for appointments that share time.
+// Returns Map<aptId, { col, totalCols }>
+function calComputeOverlapLayout(appointments) {
+  const layout = new Map();
+  if (!appointments.length) return layout;
+
+  // Convert to intervals with start/end in minutes from midnight
+  const intervals = appointments.map(a => {
+    const localStart = calUTCtoLocal(a.starts_at);
+    const startMin = localStart.getHours() * 60 + localStart.getMinutes();
+    const endMin = startMin + a.duration_minutes;
+    return { id: a.id, start: startMin, end: endMin };
+  }).sort((a, b) => a.start - b.start || a.end - b.end);
+
+  // Greedy column assignment
+  const columns = []; // each column is the end-time of the last appointment placed there
+
+  for (const iv of intervals) {
+    // Find first column where this appointment fits (no overlap)
+    let placed = false;
+    for (let c = 0; c < columns.length; c++) {
+      if (iv.start >= columns[c]) {
+        columns[c] = iv.end;
+        layout.set(iv.id, { col: c, totalCols: 0 }); // totalCols set later
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      layout.set(iv.id, { col: columns.length, totalCols: 0 });
+      columns.push(iv.end);
+    }
+  }
+
+  // Now determine totalCols for each group of overlapping appointments.
+  // For simplicity, find connected overlap groups and set totalCols to the max column used in each group.
+  // We do a second pass: for each appointment, find all appointments it overlaps with (transitively)
+  // and set totalCols to the max col + 1 in that group.
+  const groups = []; // array of sets of ids
+  for (const iv of intervals) {
+    // Find which existing groups this interval overlaps with
+    const overlapping = [];
+    for (let g = 0; g < groups.length; g++) {
+      for (const memberId of groups[g].ids) {
+        const member = intervals.find(i => i.id === memberId);
+        if (member && iv.start < member.end && iv.end > member.start) {
+          overlapping.push(g);
+          break;
+        }
+      }
+    }
+    if (overlapping.length === 0) {
+      groups.push({ ids: new Set([iv.id]) });
+    } else {
+      // Merge all overlapping groups + this interval
+      const merged = { ids: new Set([iv.id]) };
+      for (const g of overlapping) {
+        for (const id of groups[g].ids) merged.ids.add(id);
+      }
+      // Remove old groups (in reverse order to preserve indices)
+      for (const g of overlapping.sort((a, b) => b - a)) {
+        groups.splice(g, 1);
+      }
+      groups.push(merged);
+    }
+  }
+
+  // Set totalCols per group
+  for (const group of groups) {
+    let maxCol = 0;
+    for (const id of group.ids) {
+      const l = layout.get(id);
+      if (l && l.col > maxCol) maxCol = l.col;
+    }
+    for (const id of group.ids) {
+      const l = layout.get(id);
+      if (l) l.totalCols = maxCol + 1;
+    }
+  }
+
+  return layout;
+}
+
+function calAppointmentBlockHTML(apt, color, col = 0, totalCols = 1) {
+  const localStart = calUTCtoLocal(apt.starts_at);
+  const startHour = localStart.getHours();
+  const startMin = localStart.getMinutes();
+  const duration = apt.duration_minutes;
+
+  const top = ((startHour - CAL_START_HOUR) * 60 + startMin) * (CAL_HOUR_PX / 60);
+  const height = Math.max(duration * (CAL_HOUR_PX / 60), 20); // minimum 20px
+
+  if (top < 0 || startHour >= CAL_END_HOUR) return ''; // outside visible range
+
+  const cancelled = apt.status === 'cancelled';
+  const opacity = cancelled ? 'opacity-50' : '';
+  const strike = cancelled ? 'line-through' : '';
+
+  const startTimeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ });
+
+  // Calculate horizontal position for overlap layout
+  const widthPct = (1 / totalCols) * 100;
+  const leftPct = (col / totalCols) * 100;
+  const posStyle = totalCols > 1
+    ? `top:${top}px; height:${height}px; background:${color}; left:calc(${leftPct}% + 2px); width:calc(${widthPct}% - 4px);`
+    : `top:${top}px; height:${height}px; background:${color}; left:4px; right:4px;`;
+
+  return `
+    <div onclick="calShowPopup(event, '${apt.id}')"
+      class="absolute rounded-md px-2 py-1 text-xs cursor-pointer hover:brightness-110 transition-all ${opacity}"
+      style="${posStyle}">
+      <div class="font-medium text-white truncate ${strike}">${escapeHTML(apt.patient_name)}</div>
+      ${height > 30 ? `<div class="text-white/80 truncate ${strike}">${escapeHTML(apt.appointment_type)}</div>` : ''}
+      ${height > 45 ? `<div class="text-white/70 text-[10px]">${startTimeStr}</div>` : ''}
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Now Line
+// ---------------------------------------------------------------------------
+function calPositionNowLine() {
+  // Remove existing
+  document.querySelectorAll('.cal-now-line').forEach(el => el.remove());
+
+  const now = new Date();
+  const nowLocal = new Date(now.toLocaleString('en-US', { timeZone: PRACTICE_TZ }));
+  const hour = nowLocal.getHours();
+  const min = nowLocal.getMinutes();
+
+  if (hour < CAL_START_HOUR || hour >= CAL_END_HOUR) return;
+
+  const top = ((hour - CAL_START_HOUR) * 60 + min) * (CAL_HOUR_PX / 60) + 48; // +48 for header
+
+  const cols = document.getElementById('cal-container').querySelector('.flex.min-w-fit');
+  if (!cols) return;
+
+  const line = document.createElement('div');
+  line.className = 'cal-now-line absolute left-20 right-0 flex items-center z-10 pointer-events-none';
+  line.style.top = top + 'px';
+  line.innerHTML = `
+    <div class="w-2.5 h-2.5 rounded-full bg-destructive -ml-[5px]"></div>
+    <div class="flex-1 h-px bg-destructive" style="box-shadow: 0 0 8px rgba(239,68,68,0.5)"></div>`;
+  cols.style.position = 'relative';
+  cols.appendChild(line);
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — Appointment Popup
+// ---------------------------------------------------------------------------
+function calShowPopup(event, aptId) {
+  event.stopPropagation();
+  const apt = calAppointmentsLookup[aptId];
+  if (!apt) return;
+  const popup = document.getElementById('apt-popup');
+  const content = document.getElementById('apt-popup-content');
+
+  const localStart = calUTCtoLocal(apt.starts_at);
+  const endTime = new Date(localStart.getTime() + apt.duration_minutes * 60000);
+  const timeStr = localStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ })
+    + ' – ' + endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PRACTICE_TZ });
+  const dateStr = localStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PRACTICE_TZ });
+
+  const prov = calProviders.find(p => p.id === apt.provider_id);
+  const provColor = prov ? prov.color : '#6366f1';
+
+  const statusBadge = apt.status === 'cancelled'
+    ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-destructive-light text-destructive-foreground border-destructive/20 uppercase">Cancelled</span>'
+    : '<span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-success-light text-success-foreground border-success/20 uppercase">Confirmed</span>';
+
+  content.innerHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <span class="font-semibold text-sm">${escapeHTML(apt.patient_name)}</span>
+      <button onclick="document.getElementById('apt-popup').classList.add('hidden')" class="p-0.5 rounded hover:bg-dash-muted">
+        <span class="material-symbols-outlined text-dash-muted-fg text-lg">close</span>
+      </button>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="h-3 w-3 rounded-full shrink-0" style="background:${provColor}"></span>
+        <span>${escapeHTML(apt.provider_name)}</span>
+      </div>
+      <div class="flex items-center gap-2 text-dash-muted-fg">
+        <span class="material-symbols-outlined text-base">event</span>
+        <span>${dateStr} · ${timeStr}</span>
+      </div>
+      <div class="flex items-center gap-2 text-dash-muted-fg">
+        <span class="material-symbols-outlined text-base">medical_services</span>
+        <span>${escapeHTML(apt.appointment_type)} (${apt.duration_minutes} min)</span>
+      </div>
+      <div class="flex items-center gap-2 text-dash-muted-fg">
+        <span class="material-symbols-outlined text-base">call</span>
+        <span>${escapeHTML(apt.patient_phone)}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        ${statusBadge}
+        ${apt.booked_via ? `<span class="text-[10px] text-dash-muted-fg uppercase">via ${apt.booked_via}</span>` : ''}
+      </div>
+    </div>`;
+
+  // Position popup near click
+  popup.classList.remove('hidden');
+  const rect = popup.getBoundingClientRect();
+  let x = event.clientX + 8;
+  let y = event.clientY - 20;
+  if (x + rect.width > window.innerWidth - 16) x = event.clientX - rect.width - 8;
+  if (y + rect.height > window.innerHeight - 16) y = window.innerHeight - rect.height - 16;
+  if (y < 16) y = 16;
+  popup.style.left = x + 'px';
+  popup.style.top = y + 'px';
+}
+
+// Close popup on click outside
+document.addEventListener('click', (e) => {
+  const popup = document.getElementById('apt-popup');
+  if (popup && !popup.contains(e.target) && !e.target.closest('[onclick]')) {
+    popup.classList.add('hidden');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Calendar — Utilities
+// ---------------------------------------------------------------------------
+function calUTCtoLocal(isoStr) {
+  const d = new Date(isoStr);
+  return new Date(d.toLocaleString('en-US', { timeZone: PRACTICE_TZ }));
+}
+
+function calFormatDateISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function calGetMonday(d) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday = 1
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+let analyticsInitialized = false;
+let analyticsCharts = [];  // track chart instances for cleanup
+
+async function analyticsInit() {
+  try {
+    const res = await fetch('/admin/api/stats');
+    const stats = await res.json();
+    analyticsRender(stats);
+  } catch (err) {
+    console.error('Failed to load stats:', err);
+  }
+}
+
+function analyticsRender(stats) {
+  const today = stats.today || {};
+  const allTime = stats.all_time || {};
+  const total = today.total_sessions || 0;
+  const voice = today.voice_sessions || 0;
+  const chat = today.chat_sessions || 0;
+
+  // Metric cards
+  document.getElementById('stat-total-sessions').textContent = total;
+  document.getElementById('stat-voice').textContent = voice;
+  document.getElementById('stat-voice-pct').textContent = total > 0 ? `${Math.round(voice / total * 100)}% of total` : '';
+  document.getElementById('stat-chat').textContent = chat;
+  document.getElementById('stat-chat-pct').textContent = total > 0 ? `${Math.round(chat / total * 100)}% of total` : '';
+  document.getElementById('stat-booked').textContent = today.appointments_booked ?? '—';
+  document.getElementById('stat-cancelled').textContent = today.appointments_cancelled ?? '—';
+
+  const dur = today.avg_session_duration_seconds;
+  if (dur != null) {
+    const m = Math.floor(dur / 60);
+    const s = Math.round(dur % 60);
+    document.getElementById('stat-duration').textContent = `${m}m ${s}s`;
+  }
+
+  document.getElementById('stat-all-sessions').textContent = allTime.total_sessions ?? '—';
+  document.getElementById('stat-all-booked').textContent = allTime.appointments_booked ?? '—';
+
+  // Destroy previous charts
+  analyticsCharts.forEach(c => c.destroy());
+  analyticsCharts = [];
+
+  // Language donut
+  const langData = stats.language_breakdown || {};
+  const langLabels = Object.keys(langData).map(k => k === 'en' ? 'English' : k === 'es' ? 'Spanish' : k.toUpperCase());
+  const langValues = Object.values(langData);
+
+  if (langValues.length > 0) {
+    const langChart = new ApexCharts(document.getElementById('chart-language'), {
+      chart: { type: 'donut', height: 240, fontFamily: 'Inter, sans-serif' },
+      series: langValues,
+      labels: langLabels,
+      colors: ['#6366f1', '#22c55e', '#f59e0b', '#a855f7'],
+      legend: { position: 'bottom', fontSize: '13px' },
+      dataLabels: { enabled: true, formatter: (val) => Math.round(val) + '%' },
+      plotOptions: { pie: { donut: { size: '60%' } } },
+      stroke: { width: 2 },
+    });
+    langChart.render();
+    analyticsCharts.push(langChart);
+  }
+
+  // Top procedures — horizontal bar
+  const procs = stats.top_procedures || [];
+  if (procs.length > 0) {
+    const procChart = new ApexCharts(document.getElementById('chart-procedures'), {
+      chart: { type: 'bar', height: 240, fontFamily: 'Inter, sans-serif', toolbar: { show: false } },
+      series: [{ name: 'Appointments', data: procs.map(p => p.count) }],
+      xaxis: { categories: procs.map(p => p.name) },
+      colors: ['#6366f1'],
+      plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '60%' } },
+      dataLabels: { enabled: true, style: { fontSize: '12px' } },
+      grid: { borderColor: '#e2e4ec', strokeDashArray: 4 },
+      tooltip: { y: { formatter: (val) => val + ' booked' } },
+    });
+    procChart.render();
+    analyticsCharts.push(procChart);
+  }
+
+  // Busiest days — vertical bar
+  const sessionsByDay = stats.sessions_by_day || [];
+  if (sessionsByDay.length > 0) {
+    const dayChart = new ApexCharts(document.getElementById('chart-busiest-days'), {
+      chart: { type: 'bar', height: 220, fontFamily: 'Inter, sans-serif', toolbar: { show: false } },
+      series: [{ name: 'Sessions', data: sessionsByDay.map(d => d.sessions) }],
+      xaxis: { categories: sessionsByDay.map(d => d.day) },
+      colors: ['#6366f1'],
+      plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', distributed: false } },
+      dataLabels: { enabled: true, style: { fontSize: '11px' } },
+      grid: { borderColor: '#e2e4ec', strokeDashArray: 4 },
+      tooltip: { y: { formatter: (val) => val + ' sessions' } },
+    });
+    dayChart.render();
+    analyticsCharts.push(dayChart);
+  }
+
+  // Response latency — radial gauge
+  const latency = stats.avg_agent_latency_ms;
+  if (latency != null) {
+    const pct = Math.min(Math.round(latency / 3000 * 100), 100);
+    const latencyChart = new ApexCharts(document.getElementById('chart-latency'), {
+      chart: { type: 'radialBar', height: 240, fontFamily: 'Inter, sans-serif' },
+      series: [pct],
+      labels: ['Avg Latency'],
+      colors: [latency < 2000 ? '#22c55e' : latency < 3000 ? '#f59e0b' : '#ef4444'],
+      plotOptions: {
+        radialBar: {
+          hollow: { size: '60%' },
+          dataLabels: {
+            name: { fontSize: '14px', color: '#64748b', offsetY: -10 },
+            value: {
+              fontSize: '28px', fontWeight: 700, color: '#1e293b', offsetY: 5,
+              formatter: () => Math.round(latency) + 'ms',
+            },
+          },
+        },
+      },
+    });
+    latencyChart.render();
+    analyticsCharts.push(latencyChart);
+  } else {
+    document.getElementById('chart-latency').innerHTML = `
+      <div class="flex flex-col items-center justify-center h-[200px] text-dash-muted-fg">
+        <span class="material-symbols-outlined text-4xl mb-2">speed</span>
+        <p class="text-sm">No latency data yet</p>
+        <p class="text-xs mt-1">Make a voice or chat session to see metrics</p>
+      </div>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+let calInitialized = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadSessions();
+});
+</script>
+</body>
+</html>

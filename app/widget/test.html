@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Widget — Standalone Test</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 0 20px;
+      color: #333;
+      line-height: 1.7;
+    }
+    h1 { color: #1a365d; }
+    p { margin-bottom: 1em; }
+    .highlight {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      padding: 12px 16px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sunshine Dental Practice</h1>
+  <p>Welcome to Sunshine Dental! We've been serving the community since 1995 with comprehensive dental care for the whole family.</p>
+
+  <div class="highlight">
+    <strong>New patients welcome!</strong> Use the chat widget in the bottom-right corner to book an appointment or ask questions.
+  </div>
+
+  <h2>Our Services</h2>
+  <ul>
+    <li>General Dentistry (cleanings, fillings, exams)</li>
+    <li>Cosmetic Dentistry (whitening, veneers)</li>
+    <li>Orthodontics (braces, aligners)</li>
+    <li>Oral Surgery (extractions, implants)</li>
+  </ul>
+
+  <h2>Office Hours</h2>
+  <p>Monday - Friday: 8:00 AM - 5:00 PM<br>Saturday: 9:00 AM - 2:00 PM<br>Sunday: Closed</p>
+
+  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+
+  <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+  <!-- Chat Widget -->
+  <script
+    src="/widget/widget.js"
+    data-server="http://localhost:8000"
+    data-practice="Sunshine Dental"
+    data-primary-color="#2563eb"
+    data-position="bottom-right"
+    data-greeting="Hello! I'm Sunny, the Sunshine Dental assistant. How can I help you today?"
+  ></script>
+</body>
+</html>

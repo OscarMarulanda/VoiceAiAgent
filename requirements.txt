@@ -1,0 +1,28 @@
+# Web framework
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+websockets==15.0.1
+
+# LLM
+anthropic==0.84.0
+
+# Voice
+deepgram-sdk==6.0.1
+elevenlabs==2.38.1
+twilio==9.10.3
+
+# Database
+asyncpg==0.31.0
+
+# Data & Config
+pydantic==2.12.5
+pydantic-settings==2.11.0
+python-dotenv==1.2.1
+
+# Templates (admin dashboard)
+jinja2==3.1.6
+
+# Testing
+pytest==8.4.2
+pytest-asyncio==1.3.0
+httpx==0.28.1
