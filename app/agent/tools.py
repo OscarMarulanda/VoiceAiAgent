@@ -1,12 +1,11 @@
 """Claude API tool definitions and execution dispatcher."""
 
-import json
 from datetime import datetime, timedelta, timezone
 
 from app.domain.models.appointment import Appointment
 from app.domain.services import scheduling, practice
 from app.repositories import provider_repo
-from app.utils.timezone import get_practice_tz, local_to_utc, utc_to_local
+from app.utils.timezone import get_practice_tz, utc_to_local
 
 # ---------------------------------------------------------------------------
 # Tool schemas (Claude API format)
@@ -69,12 +68,24 @@ TOOLS = [
     {
         "name": "book_appointment",
         "description": (
-            "Book an appointment for a patient. All fields are required. "
-            "Only call this after confirming the details with the patient."
+            "Book an appointment for a patient. Before calling this you MUST "
+            "have just called check_availability — this tool books one of the "
+            "slots that was returned. Pass the slot_id from the chosen slot; "
+            "provider, time, type, and duration are all inferred from it. "
+            "Only call after confirming the details with the patient."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "slot_id": {
+                    "type": "string",
+                    "description": (
+                        "The slot_id from a slot returned by the most recent "
+                        "check_availability call (e.g. 's1', 's6'). This determines "
+                        "the exact time, provider, and duration — never guess or "
+                        "construct a timestamp."
+                    ),
+                },
                 "patient_name": {
                     "type": "string",
                     "description": "Full name of the patient.",
@@ -83,35 +94,12 @@ TOOLS = [
                     "type": "string",
                     "description": "Patient's phone number.",
                 },
-                "provider_id": {
-                    "type": "string",
-                    "description": "ID of the provider to book with.",
-                },
-                "appointment_type": {
-                    "type": "string",
-                    "description": "Type of appointment (e.g. 'Cleaning', 'Exam').",
-                },
-                "starts_at": {
-                    "type": "string",
-                    "description": "Appointment start time in ISO 8601 format (e.g. '2026-03-12T10:00:00+00:00').",
-                },
-                "duration_minutes": {
-                    "type": "integer",
-                    "description": "Duration in minutes.",
-                },
                 "reason": {
                     "type": "string",
                     "description": "Reason for the visit (optional, patient's own words).",
                 },
             },
-            "required": [
-                "patient_name",
-                "patient_phone",
-                "provider_id",
-                "appointment_type",
-                "starts_at",
-                "duration_minutes",
-            ],
+            "required": ["slot_id", "patient_name", "patient_phone"],
         },
     },
     {
@@ -131,7 +119,10 @@ TOOLS = [
     {
         "name": "reschedule_appointment",
         "description": (
-            "Reschedule an existing appointment to a new date/time. "
+            "Reschedule an existing appointment to a new slot. Before calling "
+            "this you MUST have just called check_availability for the new "
+            "date/time — this tool moves the appointment to one of those slots. "
+            "Pass new_slot_id from the chosen slot; never construct a timestamp. "
             "Only call after confirming the new time with the patient."
         ),
         "input_schema": {
@@ -141,12 +132,16 @@ TOOLS = [
                     "type": "string",
                     "description": "The appointment ID to reschedule.",
                 },
-                "new_starts_at": {
+                "new_slot_id": {
                     "type": "string",
-                    "description": "New start time in ISO 8601 format.",
+                    "description": (
+                        "The slot_id from a slot returned by the most recent "
+                        "check_availability call (e.g. 's2'). Determines the "
+                        "new time — never guess or construct a timestamp."
+                    ),
                 },
             },
-            "required": ["appointment_id", "new_starts_at"],
+            "required": ["appointment_id", "new_slot_id"],
         },
     },
     {
@@ -215,10 +210,16 @@ TOOLS = [
 # Tool execution dispatcher
 # ---------------------------------------------------------------------------
 
-async def execute_tool(tool_name: str, tool_input: dict) -> dict:
+async def execute_tool(
+    tool_name: str,
+    tool_input: dict,
+    notepad: dict | None = None,
+) -> dict:
     """Execute a tool call and return the result as a dict.
 
-    Also returns a compact summary for the tool log.
+    Also returns a compact summary for the tool log. The notepad is threaded
+    through so booking/rescheduling handlers can resolve slot_ids against
+    the most recent check_availability result.
 
     Returns:
         {"result": <tool output dict>, "summary": <short string for tool log>}
@@ -230,7 +231,10 @@ async def execute_tool(tool_name: str, tool_input: dict) -> dict:
             "summary": f"error: unknown tool {tool_name}",
         }
 
-    result = await handler(tool_input)
+    if tool_name in ("book_appointment", "reschedule_appointment"):
+        result = await handler(tool_input, notepad or {})
+    else:
+        result = await handler(tool_input)
     summary = _summarize_result(tool_name, tool_input, result)
     return {"result": result, "summary": summary}
 
@@ -280,19 +284,7 @@ async def _handle_check_availability(inp: dict) -> dict:
                     "Try a wider date range, or use get_providers to see available services."
                 ),
             }
-        return {
-            "available": True,
-            "providers": [
-                {
-                    "provider_id": r["provider_id"],
-                    "provider_name": r["provider_name"],
-                    "appointment_type": r["appointment_type"],
-                    "duration_minutes": r["duration_minutes"],
-                    "slots": _format_slots(r["slots"]),
-                }
-                for r in results
-            ],
-        }
+        return _build_availability_response(results)
 
     # Provider-specific search (single day — date_to ignored for simplicity)
     if provider_id:
@@ -309,46 +301,68 @@ async def _handle_check_availability(inp: dict) -> dict:
         slots = await scheduling.get_available_slots(provider_id, date_from, duration)
         provider_obj = await practice.get_provider(provider_id)
         provider_name = provider_obj.name if provider_obj else provider_id
-        return {
-            "available": len(slots) > 0,
-            "providers": [{
-                "provider_id": provider_id,
-                "provider_name": provider_name,
-                "duration_minutes": duration,
-                "slots": _format_slots(slots),
-            }],
-        }
+        return _build_availability_response([{
+            "provider_id": provider_id,
+            "provider_name": provider_name,
+            "appointment_type": appointment_type or "",
+            "duration_minutes": duration,
+            "slots": slots,
+        }])
 
     return {"error": "Provide at least appointment_type or provider_id."}
 
 
-def _format_slots(slots) -> list[dict]:
-    """Format TimeSlot objects for Claude output. Slots are already in local time."""
-    return [
-        {
-            "slot_number": i + 1,
-            "start": s.start.isoformat(),
-            "end": s.end.isoformat(),
-            "day": s.start.strftime("%A"),
-            "display": f"Slot {i + 1}: {s.start.strftime('%A, %B %d at %I:%M %p')} (use starts_at: {s.start.isoformat()})",
-        }
-        for i, s in enumerate(slots)
-    ]
+def _build_availability_response(results: list[dict]) -> dict:
+    """Assemble the availability tool result with globally unique slot_ids.
+
+    Slot IDs (s1, s2, …) are numbered across all providers in this response,
+    so each one uniquely identifies (provider, time, duration, type). The
+    agent passes slot_id back to book_appointment / reschedule_appointment
+    and the handler resolves it against the session notepad.
+    """
+    counter = 1
+    providers_out: list[dict] = []
+    for r in results:
+        slots_out = []
+        for s in r["slots"]:
+            slot_id = f"s{counter}"
+            counter += 1
+            slots_out.append({
+                "slot_id": slot_id,
+                "start": s.start.isoformat(),
+                "end": s.end.isoformat(),
+                "day": s.start.strftime("%A"),
+                "display": s.start.strftime("%A, %B %d at %I:%M %p"),
+            })
+        providers_out.append({
+            "provider_id": r["provider_id"],
+            "provider_name": r["provider_name"],
+            "appointment_type": r.get("appointment_type", ""),
+            "duration_minutes": r.get("duration_minutes", 30),
+            "slots": slots_out,
+        })
+
+    if not any(p["slots"] for p in providers_out):
+        return {"available": False, "message": "No available slots found."}
+
+    return {"available": True, "providers": providers_out}
 
 
-async def _handle_book_appointment(inp: dict) -> dict:
-    tz = await get_practice_tz()
-    starts_at = datetime.fromisoformat(inp["starts_at"])
-    # Interpret as practice-local time, convert to UTC for storage
-    starts_at = local_to_utc(starts_at, tz)
+async def _handle_book_appointment(inp: dict, notepad: dict) -> dict:
+    slot = _resolve_slot(notepad, inp.get("slot_id"))
+    if isinstance(slot, dict) and "error" in slot:
+        return slot
+
+    # Slot start is already tz-aware practice-local ISO; convert to UTC
+    starts_at = datetime.fromisoformat(slot["start"]).astimezone(timezone.utc)
 
     appointment = Appointment(
         patient_name=inp["patient_name"],
         patient_phone=inp["patient_phone"],
-        provider_id=inp["provider_id"],
-        appointment_type=inp["appointment_type"],
+        provider_id=slot["provider_id"],
+        appointment_type=slot["appointment_type"],
         starts_at=starts_at,
-        duration_minutes=inp["duration_minutes"],
+        duration_minutes=slot["duration_minutes"],
         reason=inp.get("reason"),
         booked_via="agent",
     )
@@ -359,14 +373,36 @@ async def _handle_cancel_appointment(inp: dict) -> dict:
     return await scheduling.cancel_appointment(inp["appointment_id"])
 
 
-async def _handle_reschedule_appointment(inp: dict) -> dict:
-    tz = await get_practice_tz()
-    new_starts_at = datetime.fromisoformat(inp["new_starts_at"])
-    # Interpret as practice-local time, convert to UTC for storage
-    new_starts_at = local_to_utc(new_starts_at, tz)
+async def _handle_reschedule_appointment(inp: dict, notepad: dict) -> dict:
+    slot = _resolve_slot(notepad, inp.get("new_slot_id"))
+    if isinstance(slot, dict) and "error" in slot:
+        return slot
+
+    new_starts_at = datetime.fromisoformat(slot["start"]).astimezone(timezone.utc)
     return await scheduling.reschedule_appointment(
         inp["appointment_id"], new_starts_at
     )
+
+
+def _resolve_slot(notepad: dict, slot_id: str | None) -> dict:
+    """Look up slot_id in the current session's last_availability.
+
+    Returns the slot dict, or an error dict the agent can act on.
+    """
+    if not slot_id:
+        return {"error": "slot_id is required. Call check_availability first, then pass the slot_id from one of the returned slots."}
+
+    availability = notepad.get("last_availability") or []
+    match = next((s for s in availability if s.get("slot_id") == slot_id), None)
+    if not match:
+        return {
+            "error": (
+                f"Slot '{slot_id}' is not in the current availability list. "
+                "It may be from a stale search. Call check_availability again "
+                "for the patient's preferred day and use a slot_id from that result."
+            ),
+        }
+    return match
 
 
 async def _handle_get_practice_info(_inp: dict) -> dict:

@@ -120,7 +120,9 @@ async def process_message(session_id: str, user_message: str) -> str:
                     json.dumps(tool_block.input)[:200],
                 )
 
-                result = await execute_tool(tool_block.name, tool_block.input)
+                result = await execute_tool(
+                    tool_block.name, tool_block.input, notepad
+                )
 
                 # Update notepad from tool results
                 notepad = _update_notepad_from_tool(
@@ -267,20 +269,27 @@ def _update_notepad_from_tool(
                 ]
 
         case "check_availability":
-            # Store the presented options so next turn can reference them
+            # Store every returned slot keyed by slot_id so book_appointment /
+            # reschedule_appointment can resolve it on the next turn. Never
+            # truncate — the whole point of slot_ids is that the agent can
+            # pick any slot it presented, not just the first few.
             providers = tool_result.get("providers", [])
             if providers:
                 options = []
                 for p in providers:
-                    for s in p.get("slots", [])[:3]:  # top 3 per provider
+                    for s in p.get("slots", []):
                         options.append({
+                            "slot_id": s["slot_id"],
                             "provider_id": p["provider_id"],
                             "provider_name": p["provider_name"],
+                            "appointment_type": p.get("appointment_type", ""),
+                            "duration_minutes": p.get("duration_minutes", 30),
                             "start": s["start"],
-                            "duration": p.get("duration_minutes", 30),
-                            "type": p.get("appointment_type", ""),
+                            "display": s["display"],
                         })
-                notepad["last_availability"] = options[:6]  # keep top 6 options
+                notepad["last_availability"] = options
+            else:
+                notepad["last_availability"] = []
 
         case "update_notes":
             # Append soft context from Claude
